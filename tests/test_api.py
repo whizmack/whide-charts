@@ -45,3 +45,13 @@ def test_mutating_request_from_foreign_origin_is_blocked(tmp_path):
     api, _ = client(tmp_path)
     r = api.post("/api/imports", json=dict(start="2023-01-01", end="2023-01-31", symbols=["BTCUSDT"]), headers={"Origin":"https://evil.invalid"})
     assert r.status_code == 403
+
+
+def test_replay_and_session_load_with_external_network_disabled(tmp_path, monkeypatch):
+    import socket
+    def blocked(*args, **kwargs):
+        raise AssertionError("Offline replay attempted an external connection")
+    monkeypatch.setattr(socket.socket, "connect", blocked)
+    api, _ = client(tmp_path)
+    assert api.get("/api/bars", params=dict(symbol="BTCUSDT", timeframe="4h", asOf=BASE+25*60000)).status_code == 200
+    assert api.get("/api/session").status_code == 200
