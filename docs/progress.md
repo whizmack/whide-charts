@@ -20,3 +20,7 @@ Plán: `docs/superpowers/plans/2026-10-14-replay.md`
 - Offline: API replay i session testovány se zakázaným socket.connect; bez síťové závislosti. Fonty i assety jsou lokální. Browser console bez error/warn.
 - UI refinement: zachovat bezpečný starší prefix při forward loadu místo blikání; při rewindu/změně trhu/verze skrýt ihned podle skutečně painted klíče. Samostatný regresní test PASS.
 - Ruling: přidáno přístupné české menu Kreslení nad existující setTool API, protože úzké nativní flyout cíle se při ověřování obtížně aktivovaly. Kreslicí logika se neduplikuje.
+
+## 2026-10-14 — Live / Replay + terminal redesign
+
+Added public Binance USD-M live candles alongside isolated replay, automatic stale detection/reconnect/backfill, separate Live drawing storage and shared appearance settings. Compact terminal chrome follows supplied TradingView references; candle zoom remains user controlled. Verification: 25 frontend + 32 backend tests; 2 opt-in real Binance tests (all 15 streams + forced reconnect) passed. See `docs/2026-10-14-live-verification.md`.

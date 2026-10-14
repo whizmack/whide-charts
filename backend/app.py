@@ -71,6 +71,20 @@ def create_app(store: Store) -> FastAPI:
         except DataGap as e:
             raise HTTPException(409, str(e)) from e
 
+    @app.get("/api/live/klines")
+    async def live_klines(symbol: Symbol, timeframe: Timeframe):
+        # Read-only proxy. Live data never enters immutable replay datasets.
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                response = await client.get("https://fapi.binance.com/fapi/v1/klines", params={"symbol": symbol, "interval": timeframe, "limit": 1000})
+                response.raise_for_status()
+                rows = response.json()
+                if not isinstance(rows, list):
+                    raise ValueError("Invalid Binance response")
+                return JSONResponse(rows, headers={"Cache-Control": "no-store"})
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(502, "Veřejná data Binance nejsou dostupná. Připojení obnovíme automaticky.") from exc
+
     @app.post("/api/imports", status_code=202)
     def start_import(body: ImportRequest):
         yesterday = datetime.now(timezone.utc).date()-timedelta(days=1)

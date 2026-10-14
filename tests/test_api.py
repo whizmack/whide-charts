@@ -55,3 +55,45 @@ def test_replay_and_session_load_with_external_network_disabled(tmp_path, monkey
     api, _ = client(tmp_path)
     assert api.get("/api/bars", params=dict(symbol="BTCUSDT", timeframe="4h", asOf=BASE+25*60000)).status_code == 200
     assert api.get("/api/session").status_code == 200
+
+
+def test_live_proxy_is_allowlisted_read_only_and_not_cached(tmp_path, monkeypatch):
+    import httpx
+    api, store = client(tmp_path)
+    before = store.version()
+    calls = []
+    rows = [[1792009380000, "81938", "81940", "81900", "81912", "84"]]
+    class PublicClient:
+        def __init__(self, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def get(self, url, params):
+            calls.append((url, params))
+            return httpx.Response(200, json=rows, request=httpx.Request("GET", url))
+    monkeypatch.setattr(httpx, "AsyncClient", PublicClient)
+    response = api.get("/api/live/klines?symbol=SOLUSDT&timeframe=4h")
+    assert response.status_code == 200
+    assert response.json() == rows
+    assert response.headers["cache-control"] == "no-store"
+    assert calls == [("https://fapi.binance.com/fapi/v1/klines", {"symbol": "SOLUSDT", "interval": "4h", "limit": 1000})]
+    assert api.get("/api/live/klines?symbol=BTCUSD&timeframe=1m").status_code == 422
+    assert api.get("/api/live/klines?symbol=BTCUSDT&timeframe=1s").status_code == 422
+    assert store.version() == before
+
+
+def test_live_proxy_exchange_outage_is_not_a_success(tmp_path, monkeypatch):
+    import httpx
+    api, _ = client(tmp_path)
+    class UnavailableClient:
+        def __init__(self, **kwargs):
+            pass
+        async def __aenter__(self):
+            raise httpx.ConnectError("offline")
+        async def __aexit__(self, *args):
+            pass
+    monkeypatch.setattr(httpx, "AsyncClient", UnavailableClient)
+    response = api.get("/api/live/klines?symbol=BTCUSDT&timeframe=1m")
+    assert response.status_code == 502

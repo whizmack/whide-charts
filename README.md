@@ -30,7 +30,7 @@ Support/PerpReplay. Stávající data se při změně cesty automaticky nestěhu
   například 10:25 dovoluje použít svíčky 10:00–10:24, nikoliv hotovou celou hodinu.
 - Play/pause, rychlost 0.25×–20×, další svíčka; mezerník a Alt+šipka doprava,
   pokud není aktivní formulář. Přepnutí timeframe ani páru nemění čas.
-- Kreslení je vlevo a také v horním menu **Kreslení**: trendline, horizontála, Fibonacci, zóna/obdélník, text,
+- Kreslení je vlevo a také přes tlačítko **Kreslení** v pravém panelu: trendline, horizontála, Fibonacci, zóna/obdélník, text,
   měření a **Measurements → Long/Short Position**. Dvojklik otevře nastavení
   kresby; position tool umožňuje změnu směru a přetahování entry, SL a TP.
   Text potvrďte kliknutím mimo něj nebo Ctrl/Cmd+Enter.
@@ -85,3 +85,35 @@ Pro oddělený vývoj spusťte backend s `PERP_REPLAY_DATA_DIR="$PWD/.data"` a
 [Architektura](docs/2026-10-14-architecture-proposal.md) ·
 [Technický audit](docs/2026-10-14-technical-audit.md) ·
 [Implementační plán](docs/superpowers/plans/2026-10-14-replay.md)
+
+## Live / Replay
+
+Přepínač v horní liště mění datový režim stejného grafu. **Live** přijímá
+skutečné obchody Binance USD-M perpů pro BTCUSDT, ETHUSDT a SOLUSDT přes veřejný
+`wss://fstream.binance.com/market/ws/<symbol>@kline_<interval>` (1m/5m/15m/1h/4h).
+Nejde o mark price. Účet, klíč ani objednávky nejsou potřeba. Počáteční a opravné
+načtení používá veřejné `GET https://fapi.binance.com/fapi/v1/klines` přes lokální
+read-only proxy. Endpointy jsou ověřené podle aktuální oficiální dokumentace.
+
+- Live má samostatné kresby a viewport; indikátory a nativní dialog nastavení
+  grafu fungují v obou režimech. Vzhled při přepnutí přechází do druhého režimu.
+- Replay se při odchodu pozastaví. Jeho pár, timeframe, čas, kresby a dataset
+  zůstávají zachované; návrat nezmění replay clock na aktuální čas.
+- Live data jsou pouze v paměti. Nezapisují se do Parquet, manifestů ani replay
+  session v SQLite. Live nastavení a kresby se ukládají samostatně v localStorage
+  daného prohlížeče; lze je exportovat přes Exportovat session.
+- Při uzavření/chybě spojení nebo 15 sekundách bez platné aktualizace se data
+  označí **Neaktuální**. Reconnect opakuje pokus s prodlevou 1–30 s; před návratem
+  do Live stáhne a zkontroluje celý aktuální souvislý výřez 1 000 svíček. Delší
+  výpadek posune toto okno; Live neslouží jako trvalý archiv. Mezery se nefabrikují.
+- Dostupnost závisí na internetu a dostupnosti Binance v dané síti/regionu;
+  chyby nejsou maskované statickými cenami. Replay funguje bez externí sítě.
+
+Nastavení vzhledu (svíčky, pozadí, mřížka, osy, crosshair, barvy, timezone)
+otevírá ozubené kolečko vpravo. Redesign mění okolní lišty, nikoli váš zoom.
+
+Volitelné testy proti skutečné burze (15 streamů a řízený reconnect):
+
+```sh
+RUN_BINANCE_LIVE=1 npm test -- integration/live.test.ts
+```

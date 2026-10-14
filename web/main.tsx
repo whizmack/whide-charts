@@ -5,5 +5,6 @@ import '@fontsource/geist/600.css'
 import '@fontsource/geist-mono/400.css'
 import App from './App'
 import './styles.css'
+import './terminal.css'
 
 createRoot(document.getElementById('root')!).render(<App />)

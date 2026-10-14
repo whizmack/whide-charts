@@ -10,7 +10,7 @@ export const INDICATORS = [
   { type: 'macd', label: 'MACD' }, { type: 'bollinger-bands', label: 'Bollinger Bands' },
 ]
 
-/** Vela gets exclusively server-projected candles. No exchange provider or native replay. */
+/** Explicit candle input only. The mode owner supplies replay prefixes or an isolated live window. */
 export class ChartBridge {
   readonly chart: Vela
   private selection: Selection
@@ -24,7 +24,7 @@ export class ChartBridge {
   private readonly ready: Promise<void>
   private off: (() => void)[] = []
 
-  constructor(host: HTMLElement, selection: Selection, bars: Bar[], private onChange: () => void, restored?: Session | null) {
+  constructor(host: HTMLElement, selection: Selection, bars: Bar[], private onChange: () => void, restored?: Session | null, private mode:'replay'|'live'='replay') {
     this.selection = selection
     if (restored) {
       this.snapshots = restored.chartsBySymbol
@@ -37,6 +37,11 @@ export class ChartBridge {
       drawings: { tools: ['trendline', 'hline', 'box', 'fibretracement', 'text', 'position', 'datepricerange'] },
     })
     this.restoreSymbol(selection.symbol)
+    this.off.push(this.chart.renderer.onConfigChanged(() => {
+      if (this.applying) return
+      this.capture()
+      this.onChange()
+    }))
     for (const event of ['drawing:created', 'drawing:edited', 'drawing:removed', 'indicator:added', 'indicator:removed', 'indicator:inputs', 'indicator:visibility', 'viewport:changed'] as const) {
       this.off.push(this.chart.on(event, () => {
         if (this.applying) return
@@ -73,7 +78,7 @@ export class ChartBridge {
 
   private projectDrawings() {
     this.chart.drawings.fromJSON({ version: 1, drawings: this.document.drawings.map(d => ({
-      ...d, visible: visibleDrawing(d.visible, this.createdAt[`${this.selection.symbol}:${d.id}`], this.selection.asOf),
+      ...d, visible: this.mode==='live' ? d.visible : visibleDrawing(d.visible, this.createdAt[`${this.selection.symbol}:${d.id}`], this.selection.asOf),
     })) })
   }
 

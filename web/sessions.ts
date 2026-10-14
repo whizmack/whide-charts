@@ -28,3 +28,21 @@ export function downloadSession(session: Session) {
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+/** Seed a new mode with preferences, never its time-dependent drawings/viewport. */
+export function seedLiveSession(source:Session, asOf:number):Session {
+  const result=structuredClone(source)
+  result.selection.asOf=asOf
+  result.datasetVersion='live'
+  result.drawingsCreatedAt={}
+  for(const chart of Object.values(result.chartsBySymbol)) {
+    chart.drawings={version:1,drawings:[]}
+    chart.viewport=null
+  }
+  return result
+}
+export function restoreWithAppearance(source:Session|null, renderer:unknown):Session|null {
+  const result=structuredClone(source)
+  if(result && renderer) for(const chart of Object.values(result.chartsBySymbol)) chart.renderer=structuredClone(renderer)
+  return result
+}

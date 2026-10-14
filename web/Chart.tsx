@@ -4,8 +4,8 @@ import { ChartBridge } from './chartBridge'
 import type { Selection } from './replay'
 import type { Session } from './sessions'
 
-export function Chart({ selection, bars, restored, onReady, onChange, renderKey, onPainted }: {
-  selection: Selection; bars: Bar[]; restored: Session | null
+export function Chart({ selection, bars, restored, onReady, onChange, renderKey, onPainted, mode = 'replay' }: {
+  selection: Selection; bars: Bar[]; restored: Session | null; mode?: 'replay' | 'live'
   onReady: (bridge: ChartBridge) => void; onChange: () => void
   renderKey: string; onPainted: (key: string) => void
 }) {
@@ -14,7 +14,7 @@ export function Chart({ selection, bars, restored, onReady, onChange, renderKey,
   const initial = useRef({ selection, bars, restored })
   useLayoutEffect(() => {
     const { selection, bars, restored } = initial.current
-    const instance = new ChartBridge(host.current!, selection, bars, onChange, restored)
+    const instance = new ChartBridge(host.current!, selection, bars, onChange, restored, mode)
     bridge.current = instance
     onReady(instance)
     return () => { bridge.current = null; instance.destroy() }
@@ -24,5 +24,5 @@ export function Chart({ selection, bars, restored, onReady, onChange, renderKey,
     if (bridge.current) void bridge.current.update(selection, bars).then(() => { if (active) onPainted(renderKey) })
     return () => { active = false }
   }, [selection, bars, renderKey, onPainted])
-  return <div className="chart-surface" ref={host} aria-label="Historický cenový graf" />
+  return <div className="chart-surface" ref={host} aria-label="Cenový graf" />
 }
