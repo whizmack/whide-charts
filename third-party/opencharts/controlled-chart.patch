@@ -1,0 +1,86 @@
+diff --git a/src/index.ts b/src/index.ts
+index 5c9f2c5..c3ae54f 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -19,3 +19,10 @@ export * from "./terminal/index.ts";
+ export type { OpenChartsProviderProps } from "./adapter/provider.tsx";
+ export { onNotification, type Notification } from "./notifications.ts";
+ export type { Candle, Order, Position, Symbol, PlaceOrderInput } from "./services/schemas.ts";
++
++// Perp Replay prototype: controlled chart exports; no native replay/trading runtime.
++export { ChartPanel, type ChartPanelProps } from './pages/trading/ChartPanel.tsx';
++export { ChartSettingsDialog } from './pages/trading/ChartSettingsDialog.tsx';
++export { useChartPreferences } from './hooks/useChartPreferences.ts';
++export type { DrawingLine, DrawingTool } from './pages/trading/constants.ts';
++export type { IndicatorType } from './lib/indicators.ts';
+diff --git a/src/pages/trading/ChartPanel.tsx b/src/pages/trading/ChartPanel.tsx
+index 8de4807..501ec0b 100644
+--- a/src/pages/trading/ChartPanel.tsx
++++ b/src/pages/trading/ChartPanel.tsx
+@@ -269,6 +269,10 @@ export interface ChartPanelProps {
+    * staleness watchdog must not treat the old last-bar as a data gap.
+    */
+   isReplaying?: boolean;
++  /** Host has no calendar source. */
++  showNews?: boolean;
++  /** Last traded candle close when the host does not supply bid/ask quotes. */
++  showLastPrice?: boolean;
+ }
+ 
+ // ── Chart plugin overlays ─────────────────────────────────────────────────────
+@@ -955,7 +959,7 @@ function ChartLegendHeader({
+   showCountdown: boolean;
+ }) {
+   return (
+-    <div className="absolute top-2 left-3 z-10 pointer-events-none select-none">
++    <div className="absolute top-2 left-3 z-10 pointer-events-none select-none" style={{ left: 48 }}>
+       <div className="flex items-center gap-2 text-[11px] font-mono leading-none mb-1">
+         <span className="text-foreground font-bold text-[13px] tracking-tight">
+           {selectedSymbol}
+@@ -1112,6 +1116,8 @@ export function ChartPanel({
+   onClearDrawings,
+   onClearIndicators,
+   isReplaying = false,
++  showNews = true,
++  showLastPrice = false,
+ }: ChartPanelProps) {
+   const queryClient = useQueryClient();
+   const lastGapRefetchAtRef = useRef<number>(0);
+@@ -1160,7 +1166,7 @@ export function ChartPanel({
+   const [countdown, setCountdown] = useState("");
+   const countdownIntervalMs = TF_INTERVAL_MS[timeframe];
+   const countdownText =
+-    countdownIntervalMs && countdownIntervalMs < 86_400_000 ? countdown : "";
++    !isReplaying && countdownIntervalMs && countdownIntervalMs < 86_400_000 ? countdown : "";
+   // True once the legend has been restored to the latest bar after the crosshair
+   // left the series — prevents re-setting (and re-rendering) on every off-series
+   // mouse move while the cursor sits outside the plotted data.
+@@ -1554,8 +1560,8 @@ export function ChartPanel({
+       // the Ask label and rounds to the same 5-decimal string. The explicit
+       // Bid/Ask price lines below are the authoritative right-edge prices for
+       // trading; the mid label is redundant and creates the "misaligned" look.
+-      lastValueVisible: false,
+-      priceLineVisible: false,
++      lastValueVisible: showLastPrice,
++      priceLineVisible: showLastPrice,
+       priceLineWidth: 1,
+       priceLineColor: "",
+       priceLineStyle: LineStyle.Dotted,
+@@ -2062,7 +2068,7 @@ export function ChartPanel({
+       />
+ 
+       {/* News overlay (popup, config dialog, button) */}
+-      <NewsOverlay
++      {showNews && <NewsOverlay
+         newsConfig={newsConfig}
+         setNewsConfig={setNewsConfig}
+         showNewsConfigDialog={showNewsConfigDialog}
+@@ -2072,7 +2078,7 @@ export function ChartPanel({
+         isDark={isDark}
+         pipDigits={pipDigits}
+         containerRef={containerRef}
+-      />
++      />}
+ 
+       {/* Chart-wide right-click menu (TradingView-style) */}
+       {chartMenu && (

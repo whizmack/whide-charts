@@ -117,3 +117,7 @@ Volitelné testy proti skutečné burze (15 streamů a řízený reconnect):
 ```sh
 RUN_BINANCE_LIVE=1 npm test -- integration/live.test.ts
 ```
+
+## OpenCharts comparison preview
+
+Open `/compare.html` (or the OpenCharts preview link in the toolbar) to compare a separately stored OpenCharts chart against the original Vela app. It uses the same safe replay API and real Binance LiveFeed, with native drawing tools, position tools, settings and preset indicators. It never writes to the original SQLite session. This is an evaluation page with a 1,000-bar window, not a migration of existing Vela drawings or preferences. See `docs/2026-10-14-opencharts-preview-verification.md` for verification and remaining migration work.

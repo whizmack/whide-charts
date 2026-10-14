@@ -227,7 +227,7 @@ export default function App() {
       <button className="quiet indicators-action" onClick={() => openPanel('indicators')} disabled={!bridgeReady || !data}><BarChartIcon />Indicators</button>
       <div className="mode-switch" role="group" aria-label="Chart mode"><button aria-pressed={mode==='live'} onClick={()=>switchMode('live')}>Live</button><button aria-pressed={mode==='replay'} onClick={()=>switchMode('replay')}>Replay</button></div>
       {mode==='replay' ? <button className="quiet replay-toggle" aria-pressed={replayOpen} onClick={() => { setPlaying(false); setReplayOpen(v => !v) }}><TrackNextIcon />Replay controls</button> : null}
-      <div className="toolbar-tail"><span className="layout-name">Main chart</span><span className="save-status" role="status">{saveState === 'Saved locally' ? <CheckIcon /> : null}{saveState}</span></div>
+      <div className="toolbar-tail"><a className="layout-name" href="/compare.html" target="_blank" rel="noreferrer">OpenCharts preview ↗</a><span className="save-status" role="status">{saveState === 'Saved locally' ? <CheckIcon /> : null}{saveState}</span></div>
       <button className="icon-button" aria-label="Chart settings" title="Chart settings" disabled={!bridgeReady || !data} onClick={openSettings}><GearIcon /></button>
       <button className="icon-button fullscreen-action" aria-label="Full screen" title="Full screen" onClick={() => {
         const action = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()
