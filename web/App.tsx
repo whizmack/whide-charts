@@ -82,7 +82,7 @@ export default function App() {
     setLoading(true); setError('')
     void latest.current.run(signal => loadBars(selection, version, signal)).then(response => {
       if (!response) return
-      if (!response.bars.length) throw new Error('Pro tento timeframe ještě není dokončená ani jedna minuta v jeho prvním bucketu. Zvolte pozdější začátek.')
+      if (!response.bars.length) throw new Error('No complete minute is available in the first candle for this timeframe. Choose a later start time.')
       setData({ ...response, selection }); setLoading(false)
     }).catch(e => { setError(e.message); setLoading(false); setPlaying(false) })
     return () => latest.current.cancel()
@@ -120,11 +120,11 @@ export default function App() {
     if (!payload) return
     const revision = ++saveRevision.current
     try {
-      setSaveState('Ukládám…')
+      setSaveState('Saving…')
       if (mode === 'replay') { replaySession.current=payload; await writer.current.write(payload) }
       else { liveSession.current=payload; localStorage.setItem('perp-live-session',JSON.stringify(payload)) }
-      if (revision === saveRevision.current) setSaveState('Uloženo lokálně')
-    } catch (e) { if (revision === saveRevision.current) setSaveState(e instanceof Error ? `Uložení selhalo: ${e.message}` : 'Uložení selhalo') }
+      if (revision === saveRevision.current) setSaveState('Saved locally')
+    } catch (e) { if (revision === saveRevision.current) setSaveState(e instanceof Error ? `Unable to save: ${e.message}` : 'Unable to save') }
   }, [snapshot,mode])
 
   useEffect(() => {
@@ -175,10 +175,10 @@ export default function App() {
     const value = new FormData(event.currentTarget).get('replayTime')
     if (typeof value === 'string' && value) { seek(Date.parse(value+'Z')); setDialog(null) }
   }}>
-    <p className="helper">Vyberte okamžik, do kterého budou svíčky odhalené. Čas je v UTC.</p>
-    <label>Čas replaye · UTC<input key={selection.asOf} name="replayTime" type="datetime-local" defaultValue={datetimeValue(selection.asOf)} min={available ? datetimeValue(available.start+60000) : '2023-01-01T00:01'} max={available ? datetimeValue(available.end) : undefined} required /></label>
-    <div className="timeline"><span>{available ? formatUTC(available.start) : '2023'}</span><label className="sr-only" htmlFor="timeline">Posunout čas replaye</label><input id="timeline" type="range" min={available ? available.start+60000 : initial.asOf} max={available?.end ?? initial.asOf+60000} step={60000} value={selection.asOf} disabled={!available} onChange={e => seek(Number(e.target.value))} /><span>{available ? formatUTC(available.end) : '—'}</span></div>
-    <button className="primary" type="submit">Přejít na čas</button>
+    <p className="helper">Choose the time up to which candles are revealed. All times are in UTC.</p>
+    <label>Replay time · UTC<input key={selection.asOf} name="replayTime" type="datetime-local" defaultValue={datetimeValue(selection.asOf)} min={available ? datetimeValue(available.start+60000) : '2023-01-01T00:01'} max={available ? datetimeValue(available.end) : undefined} required /></label>
+    <div className="timeline"><span>{available ? formatUTC(available.start) : '2023'}</span><label className="sr-only" htmlFor="timeline">Seek replay</label><input id="timeline" type="range" min={available ? available.start+60000 : initial.asOf} max={available?.end ?? initial.asOf+60000} step={60000} value={selection.asOf} disabled={!available} onChange={e => seek(Number(e.target.value))} /><span>{available ? formatUTC(available.end) : '—'}</span></div>
+    <button className="primary" type="submit">Go to time</button>
   </form>
 
   const changeSelection = (patch:Partial<Selection>) => {
@@ -186,7 +186,7 @@ export default function App() {
     if((patch.symbol ?? selection.symbol)===selection.symbol && (patch.timeframe ?? selection.timeframe)===selection.timeframe) return
     if(mode==='live') {
       const captured=snapshot()
-      if(captured) { liveSession.current=captured;setRestored(captured);try {localStorage.setItem('perp-live-session',JSON.stringify(captured))} catch {setSaveState('Uložení Live session selhalo')} }
+      if(captured) { liveSession.current=captured;setRestored(captured);try {localStorage.setItem('perp-live-session',JSON.stringify(captured))} catch {setSaveState('Unable to save the Live session')} }
       setBridgeReady(false)
     }
     setSelection(current=>({...current,...patch}))
@@ -197,8 +197,8 @@ export default function App() {
     setPlaying(false); setDialog(null);setSaveState('')
     const captured=snapshot() ?? (mode==='replay' && replaySession.current ? { ...replaySession.current, selection:replaySelection, speed, datasetVersion:version, ...(bridgeReady ? bridge.current?.snapshot() : {}) } : null)
     if (captured) {
-      if(mode==='replay') { replaySession.current=captured; void writer.current.write(captured).catch(()=>setSaveState('Uložení selhalo')) }
-      else { liveSession.current=captured; try { localStorage.setItem('perp-live-session',JSON.stringify(captured)) } catch { setSaveState('Uložení Live session selhalo') } }
+      if(mode==='replay') { replaySession.current=captured; void writer.current.write(captured).catch(()=>setSaveState('Unable to save')) }
+      else { liveSession.current=captured; try { localStorage.setItem('perp-live-session',JSON.stringify(captured)) } catch { setSaveState('Unable to save the Live session') } }
     }
     if(target==='live' && !liveSession.current) {
       try { liveSession.current=JSON.parse(localStorage.getItem('perp-live-session') || 'null') } catch { /* first session */ }
@@ -217,54 +217,54 @@ export default function App() {
   const openPanel = (panel: 'data' | 'indicators' | 'drawings' | 'seek') => { setPlaying(false); setDialog(panel) }
 
   return <div className="app terminal">
-    <a className="skip-link" href="#chart-area">Přejít na graf</a>
+    <a className="skip-link" href="#chart-area">Skip to chart</a>
     <header className="app-header terminal-toolbar">
       <h1 className="terminal-brand" title="Perp Replay"><BarChartIcon /><span className="sr-only">Perp Replay</span></h1>
-      <div className="market-group"><label className="sr-only" htmlFor="market">Pár</label><select id="market" value={selection.symbol} onChange={e => changeSelection({symbol:e.target.value as Symbol})}><option value="BTCUSDT">BTCUSDT</option><option value="ETHUSDT">ETHUSDT</option><option value="SOLUSDT">SOLUSDT</option></select></div>
+      <div className="market-group"><label className="sr-only" htmlFor="market">Pair</label><select id="market" value={selection.symbol} onChange={e => changeSelection({symbol:e.target.value as Symbol})}><option value="BTCUSDT">BTCUSDT</option><option value="ETHUSDT">ETHUSDT</option><option value="SOLUSDT">SOLUSDT</option></select></div>
       <div className="toolbar-divider" />
       <div className="timeframes" role="group" aria-label="Timeframe">{TIMEFRAMES.map(tf => <button key={tf} aria-pressed={selection.timeframe === tf} onClick={() => changeSelection({timeframe:tf})}>{tf}</button>)}</div>
       <div className="toolbar-divider" />
-      <button className="quiet indicators-action" onClick={() => openPanel('indicators')} disabled={!bridgeReady || !data}><BarChartIcon />Indikátory</button>
-      <div className="mode-switch" role="group" aria-label="Režim grafu"><button aria-pressed={mode==='live'} onClick={()=>switchMode('live')}>Live</button><button aria-pressed={mode==='replay'} onClick={()=>switchMode('replay')}>Replay</button></div>
-      {mode==='replay' ? <button className="quiet replay-toggle" aria-pressed={replayOpen} onClick={() => { setPlaying(false); setReplayOpen(v => !v) }}><TrackNextIcon />Ovládání replaye</button> : null}
-      <div className="toolbar-tail"><span className="layout-name">Hlavní graf</span><span className="save-status" role="status">{saveState === 'Uloženo lokálně' ? <CheckIcon /> : null}{saveState}</span></div>
-      <button className="icon-button" aria-label="Nastavení grafu" title="Nastavení grafu" disabled={!bridgeReady || !data} onClick={openSettings}><GearIcon /></button>
-      <button className="icon-button fullscreen-action" aria-label="Celá obrazovka" title="Celá obrazovka" onClick={() => {
+      <button className="quiet indicators-action" onClick={() => openPanel('indicators')} disabled={!bridgeReady || !data}><BarChartIcon />Indicators</button>
+      <div className="mode-switch" role="group" aria-label="Chart mode"><button aria-pressed={mode==='live'} onClick={()=>switchMode('live')}>Live</button><button aria-pressed={mode==='replay'} onClick={()=>switchMode('replay')}>Replay</button></div>
+      {mode==='replay' ? <button className="quiet replay-toggle" aria-pressed={replayOpen} onClick={() => { setPlaying(false); setReplayOpen(v => !v) }}><TrackNextIcon />Replay controls</button> : null}
+      <div className="toolbar-tail"><span className="layout-name">Main chart</span><span className="save-status" role="status">{saveState === 'Saved locally' ? <CheckIcon /> : null}{saveState}</span></div>
+      <button className="icon-button" aria-label="Chart settings" title="Chart settings" disabled={!bridgeReady || !data} onClick={openSettings}><GearIcon /></button>
+      <button className="icon-button fullscreen-action" aria-label="Full screen" title="Full screen" onClick={() => {
         const action = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()
-        void action.catch(() => setSaveState('Celá obrazovka není dostupná v tomto prohlížeči.'))
+        void action.catch(() => setSaveState('Full screen is not available in this browser.'))
       }}><EnterFullScreenIcon /></button>
     </header>
     <div className="terminal-body">
       <main id="chart-area" className="workspace">
-        <section className="chart-container" aria-label={mode==='live'?'Živý graf':'Graf replaye'} aria-busy={pending}>
+        <section className="chart-container" aria-label={mode==='live'?'Live chart':'Replay chart'} aria-busy={pending}>
           <div className={`chart-wrapper ${conceal ? 'concealed' : ''}`}>{data ? <Chart key={mode} mode={mode} selection={data.selection} bars={data.bars} restored={restored} onReady={onReady} onChange={onChange} onPainted={onPainted} renderKey={`${data.selection.symbol}:${data.selection.timeframe}:${data.selection.asOf}:${data.datasetVersion}`} /> : null}</div>
-          {!conceal ? <div className="chart-readout" aria-label={mode==='live'?'Aktuální svíčka':'Poslední odhalená svíčka'}><span className="instrument-title"><span className="instrument-mark">{selection.symbol === 'BTCUSDT' ? 'B' : selection.symbol === 'ETHUSDT' ? 'E' : 'S'}</span>{selection.symbol} · {selection.timeframe} · BINANCE USD-M</span><div className={`ohlc ${change >= 0 ? 'positive' : 'negative'}`}>{(['open', 'high', 'low', 'close'] as const).map((key,i) => <span key={key}><small>{['O','H','L','C'][i]}</small>{last ? number(last[key]) : '—'}</span>)}<span>{last ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : '—'}</span></div></div> : null}
-          {mode==='replay' && error ? <div className="chart-message"><h2>Graf čeká na data</h2><p role="alert">{error}</p><div><button className="primary" onClick={() => openPanel('data')}>Otevřít správu dat</button><button onClick={refresh}><ReloadIcon />Zkusit znovu</button></div></div> : pending && conceal ? <div className="chart-message loading"><div className="loading-bars"><i /><i /><i /><i /><i /></div><p>{mode==='live'?'Připojuji Binance Live…':'Načítám historické svíčky…'}</p></div> : pending ? <div className="chart-loading-note">Načítám další svíčky…</div> : null}
+          {!conceal ? <div className="chart-readout" aria-label={mode==='live'?'Current candle':'Last revealed candle'}><span className="instrument-title"><span className="instrument-mark">{selection.symbol === 'BTCUSDT' ? 'B' : selection.symbol === 'ETHUSDT' ? 'E' : 'S'}</span>{selection.symbol} · {selection.timeframe} · BINANCE USD-M</span><div className={`ohlc ${change >= 0 ? 'positive' : 'negative'}`}>{(['open', 'high', 'low', 'close'] as const).map((key,i) => <span key={key}><small>{['O','H','L','C'][i]}</small>{last ? number(last[key]) : '—'}</span>)}<span>{last ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}%` : '—'}</span></div></div> : null}
+          {mode==='replay' && error ? <div className="chart-message"><h2>Waiting for chart data</h2><p role="alert">{error}</p><div><button className="primary" onClick={() => openPanel('data')}>Manage data</button><button onClick={refresh}><ReloadIcon />Try again</button></div></div> : pending && conceal ? <div className="chart-message loading"><div className="loading-bars"><i /><i /><i /><i /><i /></div><p>{mode==='live'?'Connecting to Binance Live…':'Loading historical candles…'}</p></div> : pending ? <div className="chart-loading-note">Loading more candles…</div> : null}
         </section>
         {mode==='replay' && replayOpen ? <div className="replay-controls terminal-replay">
-          <button className="quiet select-bar" onClick={() => openPanel('seek')}><CalendarIcon />Vybrat čas</button>
+          <button className="quiet select-bar" onClick={() => openPanel('seek')}><CalendarIcon />Select time</button>
           <div className="replay-divider" />
-          <div className="transport"><button className="play-button" aria-label={playing ? 'Pozastavit replay' : 'Přehrát replay'} title="Mezerník" disabled={!playing && (pending || !!error || reachedEnd)} onClick={() => setPlaying(p => !p)}>{playing ? <PauseIcon /> : <PlayIcon />}</button><button className="icon-button" aria-label="Další svíčka" title="Alt + →" disabled={pending || !!error || reachedEnd} onClick={step}><TrackNextIcon /></button><label className="sr-only" htmlFor="speed">Rychlost replaye</label><select id="speed" value={speed} onChange={e => setSpeed(Number(e.target.value))}>{[0.25, 0.5, 1, 2, 5, 10, 20].map(v => <option key={v} value={v}>{v}×</option>)}</select><span className="step-timeframe">{selection.timeframe}</span></div>
-          <button className="quiet cursor-time" title="Změnit čas replaye" onClick={() => openPanel('seek')}>{formatUTC(selection.asOf)}<span>UTC</span></button>
-          <span className="play-state">{playing ? 'Přehrávání' : reachedEnd ? 'Konec historie' : 'Pozastaveno'}</span>
+          <div className="transport"><button className="play-button" aria-label={playing ? 'Pause replay' : 'Play replay'} title="Space" disabled={!playing && (pending || !!error || reachedEnd)} onClick={() => setPlaying(p => !p)}>{playing ? <PauseIcon /> : <PlayIcon />}</button><button className="icon-button" aria-label="Next candle" title="Alt + →" disabled={pending || !!error || reachedEnd} onClick={step}><TrackNextIcon /></button><label className="sr-only" htmlFor="speed">Replay speed</label><select id="speed" value={speed} onChange={e => setSpeed(Number(e.target.value))}>{[0.25, 0.5, 1, 2, 5, 10, 20].map(v => <option key={v} value={v}>{v}×</option>)}</select><span className="step-timeframe">{selection.timeframe}</span></div>
+          <button className="quiet cursor-time" title="Change replay time" onClick={() => openPanel('seek')}>{formatUTC(selection.asOf)}<span>UTC</span></button>
+          <span className="play-state">{playing ? 'Playing' : reachedEnd ? 'End of history' : 'Paused'}</span>
         </div> : null}
-        {mode==='live' ? <div className={`live-connection ${liveData.status}`} role="status"><span className="connection-dot" />{liveData.status==='live'?'Live · Binance USD-M':liveData.status==='stale'?'Neaktuální data · obnovuji spojení':liveData.status==='syncing'?'Doplňuji svíčky…':'Připojuji…'}<span>{liveData.lastUpdate ? `Poslední aktualizace ${new Date(liveData.lastUpdate).toISOString().slice(11,19)} UTC` : 'Čekám na první aktualizaci'}{liveData.status==='stale' && liveData.error ? ` · ${liveData.error}`:''}</span></div> : null}
-        <footer className="status-bar"><span className="status-replay">{mode==='live'?'● Live':'◂ Replay'}</span><span>{selection.symbol} · {selection.timeframe}</span><span className="status-local">{mode==='live'?'Veřejná živá data · bez účtu':'Historická data · lokálně'}</span><a href="https://velacharts.dev" target="_blank" rel="noreferrer">Vela</a><span className="status-clock">{mode==='live' ? (liveData.lastUpdate ? formatUTC(liveData.lastUpdate) : '—') : formatUTC(selection.asOf)} UTC</span></footer>
+        {mode==='live' ? <div className={`live-connection ${liveData.status}`} role="status"><span className="connection-dot" />{liveData.status==='live'?'Live · Binance USD-M':liveData.status==='stale'?'Stale data · reconnecting':liveData.status==='syncing'?'Syncing candles…':'Connecting…'}<span>{liveData.lastUpdate ? `Last update ${new Date(liveData.lastUpdate).toISOString().slice(11,19)} UTC` : 'Waiting for the first update'}{liveData.status==='stale' && liveData.error ? ` · ${liveData.error}`:''}</span></div> : null}
+        <footer className="status-bar"><span className="status-replay">{mode==='live'?'● Live':'◂ Replay'}</span><span>{selection.symbol} · {selection.timeframe}</span><span className="status-local">{mode==='live'?'Public live data · no account required':'Local historical data'}</span><a href="https://velacharts.dev" target="_blank" rel="noreferrer">Vela</a><span className="status-clock">{mode==='live' ? (liveData.lastUpdate ? formatUTC(liveData.lastUpdate) : '—') : formatUTC(selection.asOf)} UTC</span></footer>
       </main>
-      <aside className="utility-rail" aria-label="Panely a nástroje">
-        <button className="rail-button" title="Historická data" aria-label="Správa dat" onClick={() => openPanel('data')}><DownloadIcon /></button>
-        <button className="rail-button" title="Indikátory" aria-label="Indikátory" onClick={() => openPanel('indicators')} disabled={!bridgeReady || !data}><BarChartIcon /></button>
-        <button className="rail-button" title="Kreslení" aria-label="Kreslení" onClick={() => openPanel('drawings')} disabled={!bridgeReady || !data}><Pencil1Icon /></button>
+      <aside className="utility-rail" aria-label="Panels and tools">
+        <button className="rail-button" title="Historical data" aria-label="Manage data" onClick={() => openPanel('data')}><DownloadIcon /></button>
+        <button className="rail-button" title="Indicators" aria-label="Indicators" onClick={() => openPanel('indicators')} disabled={!bridgeReady || !data}><BarChartIcon /></button>
+        <button className="rail-button" title="Drawing tools" aria-label="Drawing tools" onClick={() => openPanel('drawings')} disabled={!bridgeReady || !data}><Pencil1Icon /></button>
         <div className="rail-divider" />
-        <button className="rail-button" title="Obnovit rozsah grafu" aria-label="Obnovit rozsah grafu" onClick={() => {
+        <button className="rail-button" title="Reset chart range" aria-label="Reset chart range" onClick={() => {
           if (data?.bars.length && bridge.current) bridge.current.chart.setVisibleRange({ from: data.bars[Math.max(0, data.bars.length-160)].time, to: data.bars.at(-1)!.time+MINUTES[selection.timeframe]*60_000*10 })
         }}><ResetIcon /></button>
         <div className="rail-spacer" />
-        <button className="rail-button" aria-label="Uložit session" title="Uložit session" disabled={!bridgeReady || pending || (mode==='replay' && !!error)} onClick={() => void save()}><CheckIcon /></button>
-        <button className="rail-button" aria-label="Exportovat session" title="Exportovat session do JSON" disabled={!bridgeReady || pending || (mode==='replay' && !!error)} onClick={() => { const s = snapshot(); if (s) downloadSession(s) }}><DownloadIcon /></button>
-        <button className="rail-button" aria-label="Nastavení vzhledu grafu" title="Nastavení vzhledu grafu" disabled={!bridgeReady || !data} onClick={openSettings}><GearIcon /></button>
+        <button className="rail-button" aria-label="Save session" title="Save session" disabled={!bridgeReady || pending || (mode==='replay' && !!error)} onClick={() => void save()}><CheckIcon /></button>
+        <button className="rail-button" aria-label="Export session" title="Export session as JSON" disabled={!bridgeReady || pending || (mode==='replay' && !!error)} onClick={() => { const s = snapshot(); if (s) downloadSession(s) }}><DownloadIcon /></button>
+        <button className="rail-button" aria-label="Chart appearance" title="Chart appearance" disabled={!bridgeReady || !data} onClick={openSettings}><GearIcon /></button>
       </aside>
     </div>
-    {dialog ? <Dialog title={dialog === 'data' ? 'Historická data' : dialog === 'drawings' ? 'Kreslení' : dialog === 'seek' ? 'Vybrat čas replaye' : 'Indikátory'} onClose={() => setDialog(null)}>{dialog === 'data' ? <DataPanel markets={markets} onRefresh={refresh} /> : dialog === 'drawings' ? <DrawingTools bridge={bridge.current} onChoose={() => setDialog(null)} /> : dialog === 'seek' ? seekForm : <Indicators bridge={bridge.current} />}</Dialog> : null}
+    {dialog ? <Dialog title={dialog === 'data' ? 'Historical data' : dialog === 'drawings' ? 'Drawing tools' : dialog === 'seek' ? 'Select replay time' : 'Indicators'} onClose={() => setDialog(null)}>{dialog === 'data' ? <DataPanel markets={markets} onRefresh={refresh} /> : dialog === 'drawings' ? <DrawingTools bridge={bridge.current} onChoose={() => setDialog(null)} /> : dialog === 'seek' ? seekForm : <Indicators bridge={bridge.current} />}</Dialog> : null}
   </div>
 }

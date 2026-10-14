@@ -36,16 +36,16 @@ def router(store: Store):
     @routes.put("/api/session")
     def save_session(body: Session):
         if not set(body.chartsBySymbol).issubset(SYMBOLS):
-            raise HTTPException(422, "Session obsahuje neznámý pár.")
+            raise HTTPException(422, "The session contains an unknown pair.")
         try:
             market = next(m for m in store.markets(body.datasetVersion) if m["symbol"] == body.selection.symbol)
         except KeyError as e:
-            raise HTTPException(422, "Verze datasetu session není dostupná.") from e
+            raise HTTPException(422, "The session dataset version is unavailable.") from e
         if not any(r["start"] < body.selection.asOf <= r["end"] for r in market["ranges"]):
-            raise HTTPException(422, "Čas session není v dostupných datech.")
+            raise HTTPException(422, "The session time is outside the available data.")
         encoded = body.model_dump_json()
         if len(encoded) > 2_000_000:
-            raise HTTPException(422, "Session je příliš velká; exportujte a omezte počet kreseb.")
+            raise HTTPException(422, "The session is too large. Export it and reduce the number of drawings.")
         with store.connect() as db:
             db.execute("INSERT OR REPLACE INTO sessions VALUES ('current',?)", (encoded,))
         return {"saved": True}

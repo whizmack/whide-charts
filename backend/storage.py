@@ -17,17 +17,17 @@ COLUMNS = ["time", "open", "high", "low", "close", "volume"]
 def validate_frame(frame: pd.DataFrame) -> pd.DataFrame:
     out = frame[COLUMNS].copy()
     if out.empty or not np.isfinite(out.to_numpy(dtype=float)).all():
-        raise ValueError("Archiv je prázdný nebo obsahuje neplatná čísla.")
+        raise ValueError("The archive is empty or contains invalid numbers.")
     if (out.time % 60000 != 0).any() or (out.time < 1672531200000).any() or (out.time > 4102444800000).any():
-        raise ValueError("Neplatné minutové timestamps; očekávány UTC milisekundy od roku 2023.")
+        raise ValueError("Invalid one-minute timestamps. Expected UTC milliseconds from 2023 onward.")
     out["time"] = out.time.astype("int64")
     out = out.sort_values("time").reset_index(drop=True)
     if (out.time.diff().dropna() != 60000).any():
-        raise ValueError("Archiv obsahuje mezery nebo duplicity.")
+        raise ValueError("The archive contains gaps or duplicates.")
     if ((out[["open", "high", "low", "close"]] <= 0).any().any() or (out.volume < 0).any()
             or (out.high < out[["open", "close", "low"]].max(axis=1)).any()
             or (out.low > out[["open", "close", "high"]].min(axis=1)).any()):
-        raise ValueError("Neplatné OHLCV v archivu.")
+        raise ValueError("The archive contains invalid OHLCV data.")
     return out
 
 
@@ -58,7 +58,7 @@ class Store:
             if version:
                 row = db.execute("SELECT manifest FROM datasets WHERE version=?", (version,)).fetchone()
                 if row is None:
-                    raise KeyError("Uložená verze datasetu není dostupná.")
+                    raise KeyError("The saved dataset version is unavailable.")
                 return json.loads(row[0])
             return [dict(r) for r in db.execute("SELECT * FROM imports ORDER BY symbol, period")]
 
@@ -74,7 +74,7 @@ class Store:
 
     def install(self, symbol: str, period: str, frame: pd.DataFrame, checksum: str, source: str):
         if symbol not in SYMBOLS or not re.fullmatch(r"\d{4}-\d{2}(?:-\d{2})?", period) or not re.fullmatch(r"[a-f0-9]{64}", checksum):
-            raise ValueError("Neplatný trh, datum nebo checksum.")
+            raise ValueError("Invalid market, date or checksum.")
         frame = validate_frame(frame)
         relative = Path("market") / symbol / "1m" / f"{period}-{checksum}.parquet"
         path = self.root / relative

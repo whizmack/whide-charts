@@ -12,7 +12,7 @@ class DataGap(ValueError):
 
 def project_bars(frame: pd.DataFrame, as_of: int, minutes: int, limit: int = 500) -> list[dict]:
     if minutes not in TIMEFRAMES.values() or not 1 <= limit <= 2000:
-        raise ValueError("Nepodporovaný timeframe nebo velikost okna.")
+        raise ValueError("Unsupported timeframe or window size.")
     if frame.empty:
         return []
     known = frame.loc[frame.time + MINUTE <= as_of].sort_values("time").copy()
@@ -20,7 +20,7 @@ def project_bars(frame: pd.DataFrame, as_of: int, minutes: int, limit: int = 500
         return []
     # Validate BEFORE grouping: resample must never disguise a missing minute.
     if (known.time.diff().dropna() != MINUTE).any():
-        raise DataGap("V historii chybí minuta nebo obsahuje duplicity. Doplňte data.")
+        raise DataGap("History contains missing or duplicate minutes. Download the missing data.")
     width = minutes * MINUTE
     first_full_bucket = ((int(known.time.iloc[0]) + width - 1) // width) * width
     known = known.loc[known.time >= first_full_bucket]

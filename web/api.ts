@@ -11,7 +11,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
     const detail = error.detail
-    throw new Error(typeof detail === 'string' ? detail : `Požadavek se nepodařil (${response.status}). Zkontrolujte zadané hodnoty.`)
+    throw new Error(typeof detail === 'string' ? detail : `Request failed (${response.status}). Check the entered values.`)
   }
   return response.json() as Promise<T>
 }

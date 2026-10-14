@@ -24,5 +24,5 @@ export function Chart({ selection, bars, restored, onReady, onChange, renderKey,
     if (bridge.current) void bridge.current.update(selection, bars).then(() => { if (active) onPainted(renderKey) })
     return () => { active = false }
   }, [selection, bars, renderKey, onPainted])
-  return <div className="chart-surface" ref={host} aria-label="Cenový graf" />
+  return <div className="chart-surface" ref={host} aria-label="Price chart" />
 }

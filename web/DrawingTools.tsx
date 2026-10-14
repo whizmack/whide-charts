@@ -2,13 +2,13 @@ import type { DrawingTypeKey } from '@luxalgo/vela'
 import type { ChartBridge } from './chartBridge'
 
 const tools: { type: DrawingTypeKey; label: string; hint: string }[] = [
-  { type:'trendline', label:'Trendline', hint:'Dva body určují sklon linie.' },
-  { type:'hline', label:'Horizontální linie', hint:'Jeden bod určuje cenovou úroveň.' },
-  { type:'box', label:'Obdélník / zóna', hint:'Vyberte dva protilehlé rohy.' },
-  { type:'fibretracement', label:'Fibonacci', hint:'Označte začátek a konec pohybu.' },
-  { type:'text', label:'Text', hint:'Vyberte místo; dvojklik otevře nastavení textu.' },
-  { type:'datepricerange', label:'Měření ceny a času', hint:'Dva body změří pohyb a jeho délku.' },
-  { type:'position', label:'Long / Short pozice', hint:'První bod je entry. Druhý bod nad entry vytvoří long, pod entry short. Entry, SL i TP lze přetahovat.' },
+  { type:'trendline', label:'Trendline', hint:'Select two points to define the line.' },
+  { type:'hline', label:'Horizontal line', hint:'Select a point to set the price level.' },
+  { type:'box', label:'Rectangle / zone', hint:'Select two opposite corners.' },
+  { type:'fibretracement', label:'Fibonacci', hint:'Select the start and end of the move.' },
+  { type:'text', label:'Text', hint:'Select a position. Double-click to edit the text.' },
+  { type:'datepricerange', label:'Price and time range', hint:'Select two points to measure price change and duration.' },
+  { type:'position', label:'Long / Short position', hint:'The first point sets entry. Place the second above entry for a long or below for a short. Drag entry, SL and TP to adjust.' },
 ]
 
 export function DrawingTools({ bridge, onChoose }: { bridge: ChartBridge | null; onChoose: () => void }) {

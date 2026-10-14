@@ -8,10 +8,10 @@ function valid(bar:Bar) {
   return Object.values(bar).every(Number.isFinite) && Number.isInteger(bar.time) && bar.time > 0 && bar.volume >= 0 && bar.low > 0 && bar.low <= Math.min(bar.open,bar.close) && bar.high >= Math.max(bar.open,bar.close)
 }
 export function parseHistory(rows:unknown, timeframe:Timeframe):Bar[] {
-  if (!Array.isArray(rows) || !rows.length) throw new Error('Binance nevrátila svíčky.')
+  if (!Array.isArray(rows) || !rows.length) throw new Error('Binance returned no candles.')
   const bars=rows.map(r=>({time:Number(r[0]),open:Number(r[1]),high:Number(r[2]),low:Number(r[3]),close:Number(r[4]),volume:Number(r[5])}))
   const width=MINUTES[timeframe]*60000
-  if (bars.some((b,i)=>!valid(b) || b.time%width!==0 || (i>0 && b.time!==bars[i-1].time+width))) throw new Error('Historie Binance obsahuje neplatná data nebo mezeru.')
+  if (bars.some((b,i)=>!valid(b) || b.time%width!==0 || (i>0 && b.time!==bars[i-1].time+width))) throw new Error('Binance history contains invalid data or a gap.')
   return bars
 }
 export function parseKline(raw:string,symbol:Symbol,timeframe:Timeframe):{bar:Bar;eventTime:number}|null {
@@ -37,7 +37,7 @@ export class LiveFeed {
     socket:url=>new WebSocket(url),
     load:async signal=>{
       const res=await fetch(`/api/live/klines?symbol=${symbol}&timeframe=${timeframe}`,{signal,cache:'no-store'})
-      if (!res.ok) throw new Error('Veřejná data Binance nejsou dostupná. Připojení obnovíme automaticky.')
+      if (!res.ok) throw new Error('Public Binance data is unavailable. Reconnecting automatically.')
       return parseHistory(await res.json(),timeframe)
     },
   }) {}
@@ -49,7 +49,7 @@ export class LiveFeed {
     let received=started, hydrated=false, eventTime=0
     const buffered=new Map<number,{bar:Bar;eventTime:number}>()
     const current=()=>this.running && generation===this.generation
-    const fail=(error='Spojení přerušeno. Obnovuji spojení a doplňuji svíčky…')=>{
+    const fail=(error='Connection lost. Reconnecting and syncing candles…')=>{
       if (!current()) return
       ++this.generation;this.abort?.abort();this.socket?.close();clearInterval(this.watchdog)
       this.publish({status:'stale',error})
@@ -70,11 +70,11 @@ export class LiveFeed {
         const merged=new Map(bars.map(b=>[b.time,b]))
         for (const {bar} of buffered.values()) if(bar.time>=bars[0].time) merged.set(bar.time,bar)
         const result=[...merged.values()].sort((a,b)=>a.time-b.time).slice(-1000)
-        if (result.some((b,i)=>i>0 && b.time!==result[i-1].time+width)) {fail('Doplňuji chybějící svíčky…');return}
+        if (result.some((b,i)=>i>0 && b.time!==result[i-1].time+width)) {fail('Backfilling missing candles…');return}
         hydrated=true
         this.publish({bars:result,status:buffered.size?'live':'syncing',lastUpdate:buffered.size?received:null,error:''})
         if(buffered.size) this.attempts=0
-      }).catch(()=>{if(current()) fail('Stažení svíček selhalo. Zkusím to znovu…')})
+      }).catch(()=>{if(current()) fail('Unable to download candles. Retrying…')})
     }
     socket.onmessage=event=>{
       if (!current() || typeof event.data!=='string') return
@@ -83,12 +83,12 @@ export class LiveFeed {
       eventTime=parsed.eventTime;received=Date.now()
       if (!hydrated) {buffered.set(parsed.bar.time,parsed);return}
       const bars=this.state.bars, last=bars.at(-1)
-      if (!last || parsed.bar.time>last.time+width) {fail('Doplňuji chybějící svíčky…');return}
+      if (!last || parsed.bar.time>last.time+width) {fail('Backfilling missing candles…');return}
       if(parsed.bar.time<last.time) return
       const next=parsed.bar.time===last.time?[...bars.slice(0,-1),parsed.bar]:[...bars,parsed.bar].slice(-1000)
       this.attempts=0;this.publish({bars:next,status:'live',lastUpdate:received,error:''})
     }
-    this.watchdog=setInterval(()=>{if(Date.now()-received>15000 || (!hydrated && Date.now()-started>15000)) fail('Data nejsou aktuální. Obnovuji spojení…')},1000)
+    this.watchdog=setInterval(()=>{if(Date.now()-received>15000 || (!hydrated && Date.now()-started>15000)) fail('Data is stale. Reconnecting…')},1000)
   }
   stop() {this.running=false;++this.generation;clearTimeout(this.retry);clearInterval(this.watchdog);this.abort?.abort();this.socket?.close()}
 }

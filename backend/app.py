@@ -39,7 +39,7 @@ def create_app(store: Store) -> FastAPI:
     async def local_mutations(request: Request, call_next):
         origin = request.headers.get("origin")
         if request.method not in ("GET", "HEAD", "OPTIONS") and origin and urlsplit(origin).hostname not in ("localhost", "127.0.0.1", "::1"):
-            return JSONResponse({"detail": "Změny jsou povolené pouze z lokální aplikace."}, status_code=403)
+            return JSONResponse({"detail": "Changes are only allowed from the local application."}, status_code=403)
         return await call_next(request)
 
     @app.get("/api/markets")
@@ -53,17 +53,17 @@ def create_app(store: Store) -> FastAPI:
             current_version = store.fingerprint(manifest)
             parts = [p for p in manifest if p["symbol"] == symbol]
             if not parts:
-                raise HTTPException(404, "Pro tento pár nejsou stažená data. Otevřete správu dat.")
+                raise HTTPException(404, "No data has been downloaded for this pair. Open Manage data.")
             lower = min(p["first"] for p in parts)
             upper = max(p["last"] for p in parts)+MINUTE
             cutoff = asOf//MINUTE*MINUTE
             if cutoff <= lower or cutoff > upper:
-                raise HTTPException(416, "Zvolený čas je mimo staženou historii. Doplňte data nebo změňte datum.")
+                raise HTTPException(416, "The selected time is outside the downloaded history. Download more data or change the date.")
             width = TIMEFRAMES[timeframe]*MINUTE
             start = max(lower, (cutoff//width-limit)*width)
             frame = store.read(symbol, start, cutoff, current_version)
             if frame.empty or int(frame.time.max())+MINUTE != cutoff:
-                raise DataGap("Pro zvolený čas chybí minutová data. Doplňte historii.")
+                raise DataGap("One-minute data is missing for the selected time. Download the missing history.")
             projected = project_bars(frame, cutoff, TIMEFRAMES[timeframe], limit)
             return {"bars": projected, "asOf": cutoff, "datasetVersion": current_version, "available": {"start":lower, "end":upper}}
         except KeyError as e:
@@ -83,16 +83,16 @@ def create_app(store: Store) -> FastAPI:
                     raise ValueError("Invalid Binance response")
                 return JSONResponse(rows, headers={"Cache-Control": "no-store"})
         except (httpx.HTTPError, ValueError) as exc:
-            raise HTTPException(502, "Veřejná data Binance nejsou dostupná. Připojení obnovíme automaticky.") from exc
+            raise HTTPException(502, "Public Binance data is unavailable. Reconnecting automatically.") from exc
 
     @app.post("/api/imports", status_code=202)
     def start_import(body: ImportRequest):
         yesterday = datetime.now(timezone.utc).date()-timedelta(days=1)
         if body.start < date(2023, 1, 1) or body.start > body.end or body.end > yesterday:
-            raise HTTPException(422, "Vyberte období od 1. 1. 2023 nejpozději do včerejška UTC.")
+            raise HTTPException(422, "Choose a date range from January 1, 2023 through yesterday in UTC.")
         with job_lock:
             if any(j["status"] == "running" for j in jobs.values()):
-                raise HTTPException(409, "Už probíhá import historie.")
+                raise HTTPException(409, "A history import is already running.")
             job_id = uuid.uuid4().hex
             work = [(s, p, d) for s in dict.fromkeys(body.symbols) for p, d in periods(body.start, body.end)]
             job = {"id": job_id, "status": "running", "done": 0, "total": len(work), "current": "", "errors": []}
@@ -117,7 +117,7 @@ def create_app(store: Store) -> FastAPI:
     @app.get("/api/imports/{job_id}")
     def import_status(job_id: str):
         if job_id not in jobs:
-            raise HTTPException(404, "Import není dostupný; po restartu zkontrolujte pokrytí dat.")
+            raise HTTPException(404, "Import status is unavailable. Check data coverage after restarting.")
         return jobs[job_id]
 
     dist = Path(__file__).resolve().parents[1] / "dist"

@@ -17,11 +17,11 @@ DATA_TERMS = "https://github.com/binance/binance-public-data/blob/master/TERMS_A
 
 def parse_archive(data: bytes, checksum: str) -> pd.DataFrame:
     if hashlib.sha256(data).hexdigest() != checksum:
-        raise ValueError("Nesouhlasí SHA-256 checksum archivu. Zkuste stažení zopakovat.")
+        raise ValueError("The archive SHA-256 checksum does not match. Download it again.")
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         files = [p for p in z.infolist() if p.filename.endswith(".csv")]
         if len(files) != 1 or files[0].file_size > 64*1024*1024:
-            raise ValueError("Archiv nemá očekávaný CSV soubor.")
+            raise ValueError("The archive does not contain the expected CSV file.")
         text = z.read(files[0])
     header = not text.split(b",", 1)[0].isdigit()
     frame = pd.read_csv(io.BytesIO(text), header=0 if header else None, usecols=range(6))
@@ -76,6 +76,6 @@ def import_archive(store: Store, symbol: str, period: str, daily=False, client: 
     first = datetime.fromisoformat(period if daily else period+"-01").replace(tzinfo=timezone.utc)
     days = 1 if daily else calendar.monthrange(first.year, first.month)[1]
     if len(frame) != days*1440 or int(frame.time.iloc[0]) != int(first.timestamp()*1000):
-        raise ValueError(f"Archiv {symbol} {period} nemá úplné minutové pokrytí.")
+        raise ValueError(f"Archive {symbol} {period} does not have complete one-minute coverage.")
     store.install(symbol, period, frame, checksum, url)
     return "imported"
