@@ -1,8 +1,8 @@
 # Perp Replay
 
-Lokální historický backtesting Binance USD-M perpetual futures pro BTCUSDT,
-ETHUSDT a SOLUSDT. První etapa: bar replay, kreslení a indikátory. Journal a
-Freqtrade integrace přijdou v dalších etapách.
+Lokální charting a historický replay Binance USD-M perpetual futures pro
+BTCUSDT, ETHUSDT a SOLUSDT. OpenCharts je hlavní aplikace. Journal, ruční
+vyhodnocení obchodů a Freqtrade integrace jsou další etapy.
 
 ## Spuštění na Macu
 
@@ -14,9 +14,9 @@ Python 3.12 uv automaticky připraví. V adresáři projektu spusťte:
 ```
 
 Otevřete [lokální aplikaci](http://127.0.0.1:8765). Ukončení serveru: Ctrl+C.
-První instalace závislostí a stažení historie potřebují internet; již stažená
-historie a sessions fungují offline. Launcher nevytváří cloudový účet, neposílá
-objednávky a nepřipojuje živý stream.
+Historický replay funguje offline po stažení historie. Live používá veřejný
+Binance feed a potřebuje internet. Aplikace nevyžaduje účet ani API klíče a
+neodesílá objednávky.
 
 Data této vývojové verze jsou v `.data/` vedle kódu, mimo Git. Umístění lze
 změnit přes `PERP_REPLAY_DATA_DIR=/absolutni/cesta ./scripts/start.sh`.
@@ -25,33 +25,31 @@ Support/PerpReplay. Stávající data se při změně cesty automaticky nestěhu
 
 ## Použití
 
-- Vyberte pár a timeframe 1m, 5m, 15m, 1h nebo 4h.
-- Zadejte čas v **UTC** a potvrďte **Přejít**. Čas označuje hranici odhalených dat;
-  například 10:25 dovoluje použít svíčky 10:00–10:24, nikoliv hotovou celou hodinu.
-- Play/pause, rychlost 0.25×–20×, další svíčka; mezerník a Alt+šipka doprava,
-  pokud není aktivní formulář. Přepnutí timeframe ani páru nemění čas.
-- Kreslení je vlevo a také přes tlačítko **Kreslení** v pravém panelu: trendline, horizontála, Fibonacci, zóna/obdélník, text,
-  měření a **Measurements → Long/Short Position**. Dvojklik otevře nastavení
-  kresby; position tool umožňuje změnu směru a přetahování entry, SL a TP.
-  Text potvrďte kliknutím mimo něj nebo Ctrl/Cmd+Enter.
-- Indikátory: Volume, SMA, EMA, RSI, MACD a Bollinger Bands. Parametry se mění
-  v dialogu Indikátory nebo přes nastavení přímo v grafu. EMA 20 a Volume jsou výchozí.
-- Sessions se automaticky ukládají do SQLite, tlačítko Uložit session ukládá
-  okamžitě. Obnova je vždy pozastavená, s indikátory, kresbami a viewportem.
-  Export session uloží JSON. Při návratu před vznik kresby se tato kresba skryje.
-- Správa dat stáhne chybějící archivy vybraného období pro všechny tři páry.
-  Pokrytí a chyby jsou viditelné. Nejnovější dostupný archiv může být včerejší.
-
-Minutové OHLCV neurčuje pořadí ticků uvnitř minuty. První verze nevyhodnocuje
-SL/TP jako uskutečněný obchod a nemá vlastní simulační engine.
+- Vyberte pár BTCUSDT, ETHUSDT nebo SOLUSDT a timeframe 1m, 5m, 15m, 1h nebo 4h.
+- V režimu Replay nastavte čas v **UTC**. Je to hranice známých dat: například
+  10:25 dovoluje použít minuty 10:00–10:24. Transport nabízí play/pause, další
+  svíčku a rychlost 0.5×–10×. Všechny viditelné grafy sdílí Replay cutoff.
+- Live zobrazuje skutečné veřejné Binance USD-M svíčky. Při výpadku ukáže stav
+  spojení nebo zastaralých dat; ceny nenahrazuje demo feedem.
+- Rozložení podporuje jeden až čtyři grafy, maximalizaci, nastavitelný split,
+  volitelný watchlist a synchronizaci času nebo crosshairu.
+- Indikátory: SMA, EMA, Bollinger Bands, VWAP, RSI, MACD, ATR a Stochastic.
+  Oscilátory mají oddělené panely; vstupy, zdroje a styl lze upravit.
+- Kresby zahrnují čáry, Fibonacci, tvary, text a position nástroje. Position
+  tool popisuje plánovaný setup; neznamená vyplněný obchod ani výpočet P&L.
+- Rozložení, výběr párů/timeframů, indikátory, Replay čas, viewporty a kresby se
+  ukládají do localStorage prohlížeče pod prefixem `opencharts-preview:`.
+  Vzhled grafu má samostatné nativní preference OpenCharts. Jiný origin nebo
+  profil prohlížeče má vlastní úložiště.
 
 ## Data a reprodukovatelnost
 
-Minutová historie je ve verzovaných Parquet souborech. SQLite obsahuje katalog,
-neměnné manifesty datasetů a poslední session. Session odkazuje na konkrétní
-verzi; novější import jí tiše nemění data. Správa dat po dokončení importu
-přepne aplikaci na aktuální dataset. Archiv musí projít SHA-256, kontrolou
-timestampů, úplnosti, duplicit a OHLCV. Mezery zastaví projekci.
+Minutová historie je ve verzovaných Parquet souborech. SQLite obsahuje katalog
+a neměnné manifesty datasetů. OpenCharts načte aktuální dataset version přes
+`/api/markets`; grafová nastavení a kresby neukládá do SQLite session. Backend
+import API a Vela session endpoint zůstávají zachovány, ale hlavní UI je
+nepoužívá. Binance archiv musí projít SHA-256, kontrolou timestampů, úplnosti,
+duplicit a OHLCV. Mezery zastaví projekci.
 
 V tomto workspace byla ověřena celá historie 2023-01-01 až 2026-10-13:
 1 990 080 minutových svíček na každý pár. Počet a rozsah aktuální instalace
@@ -72,9 +70,10 @@ Pro oddělený vývoj spusťte backend s `PERP_REPLAY_DATA_DIR="$PWD/.data"` a
 
 ## Licence a původ
 
-- Graf [Vela 0.8.4](https://github.com/LuxAlgo/Vela): Apache-2.0 a NOTICE,
-  viditelná atribuce v grafu a patičce. Používáme nativní renderer i kresby;
-  placené TradingView není potřeba. Pine addon nepoužíváme.
+- Graf [OpenCharts 0.3.0](https://github.com/dylanpersonguy/OpenCharts): MIT;
+  používá [Lightweight Charts](https://github.com/tradingview/lightweight-charts)
+  pod Apache-2.0 s požadovanou atribucí. OpenCharts je samostatný projekt;
+  TradingView placené služby ani Pine addon nepoužíváme.
 - Data [Binance Vision](https://data.binance.vision/) mají vlastní
   [podmínky datasetu](https://github.com/binance/binance-public-data/blob/master/TERMS_AND_CONDITIONS.md),
   včetně CC BY-NC-SA 4.0 a osobního výzkumného použití. MIT licence pomocných
@@ -88,36 +87,42 @@ Pro oddělený vývoj spusťte backend s `PERP_REPLAY_DATA_DIR="$PWD/.data"` a
 
 ## Live / Replay
 
-Přepínač v horní liště mění datový režim stejného grafu. **Live** přijímá
-skutečné obchody Binance USD-M perpů pro BTCUSDT, ETHUSDT a SOLUSDT přes veřejný
-`wss://fstream.binance.com/market/ws/<symbol>@kline_<interval>` (1m/5m/15m/1h/4h).
-Nejde o mark price. Účet, klíč ani objednávky nejsou potřeba. Počáteční a opravné
-načtení používá veřejné `GET https://fapi.binance.com/fapi/v1/klines` přes lokální
-read-only proxy. Endpointy jsou ověřené podle aktuální oficiální dokumentace.
+The main chart toolbar switches between historical Replay and a real public
+Binance USD-M Live feed. Live uses Binance WebSocket klines plus REST hydration
+and recovery through the local read-only API. It is trade-price data, not mark
+price. Live bars stay in memory and never enter Parquet or Replay history.
 
-- Live má samostatné kresby a viewport; indikátory a nativní dialog nastavení
-  grafu fungují v obou režimech. Vzhled při přepnutí přechází do druhého režimu.
-- Replay se při odchodu pozastaví. Jeho pár, timeframe, čas, kresby a dataset
-  zůstávají zachované; návrat nezmění replay clock na aktuální čas.
-- Live data jsou pouze v paměti. Nezapisují se do Parquet, manifestů ani replay
-  session v SQLite. Live nastavení a kresby se ukládají samostatně v localStorage
-  daného prohlížeče; lze je exportovat přes Exportovat session.
-- Při uzavření/chybě spojení nebo 15 sekundách bez platné aktualizace se data
-  označí **Neaktuální**. Reconnect opakuje pokus s prodlevou 1–30 s; před návratem
-  do Live stáhne a zkontroluje celý aktuální souvislý výřez 1 000 svíček. Delší
-  výpadek posune toto okno; Live neslouží jako trvalý archiv. Mezery se nefabrikují.
-- Dostupnost závisí na internetu a dostupnosti Binance v dané síti/regionu;
-  chyby nejsou maskované statickými cenami. Replay funguje bez externí sítě.
+Replay uses the local, versioned 1m dataset and one UTC cutoff shared by visible
+charts. It cannot reveal bars after that cutoff. Leaving Replay pauses it and
+keeps its selection and time; changing symbol or timeframe does not move the
+shared cutoff. Replay remains usable offline after history has been downloaded.
 
-Nastavení vzhledu (svíčky, pozadí, mřížka, osy, crosshair, barvy, timezone)
-otevírá ozubené kolečko vpravo. Redesign mění okolní lišty, nikoli váš zoom.
-
-Volitelné testy proti skutečné burze (15 streamů a řízený reconnect):
+Live needs internet access. The UI shows stale/connection states during a feed
+outage and never substitutes demo prices. Optional integration checks against
+the live exchange are:
 
 ```sh
 RUN_BINANCE_LIVE=1 npm test -- integration/live.test.ts
 ```
 
-## OpenCharts comparison preview
+## OpenCharts workspace
 
-Open `/compare.html` (or the OpenCharts preview link in the toolbar) to compare a separately stored OpenCharts chart against the original Vela app. It uses the same safe replay API and real Binance LiveFeed, with native drawing tools, position tools, settings and preset indicators. It never writes to the original SQLite session. This is an evaluation page with a 1,000-bar window, not a migration of existing Vela drawings or preferences. See `docs/2026-10-14-opencharts-preview-verification.md` for verification and remaining migration work.
+OpenCharts is served from `/` and uses the same shared FastAPI bars and Live
+services. Its current chart workspace supports one, two, three or four charts,
+maximize/restore, resizable splitters, and a watchlist. Pair and timeframe are
+per chart; visible Replay charts share a cutoff. Optional time/scroll and
+crosshair sync map by timestamps.
+
+RSI, MACD, ATR and Stochastic use separate resizable panes; EMA, SMA, Bollinger
+Bands and VWAP render over price. Study inputs, sources and styles are editable.
+VWAP is calculated over loaded bars and labels its UTC reset boundary. Drawings
+and viewport controls include weak/strong magnet, temporary Cmd/Ctrl snap,
+stay-in-drawing mode and scoped undo/redo. Native chart appearance preferences
+are shared across the workspace.
+
+Workspace configuration, Replay/Live selections, viewports and drawings persist
+locally under `opencharts-preview:`. **Export backup** downloads a JSON snapshot
+of workspace settings and drawings; it is not a backup of the market database
+or a verified restore workflow. Vela and OpenAlgo chart settings are not
+migrated. Historical browser verification is recorded in
+[`docs/2026-10-15-workspace-verification.md`](docs/2026-10-15-workspace-verification.md).

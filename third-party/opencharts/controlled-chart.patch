@@ -1,8 +1,8 @@
 diff --git a/src/index.ts b/src/index.ts
-index 5c9f2c5..c3ae54f 100644
+index 5c9f2c5..22e4b5b 100644
 --- a/src/index.ts
 +++ b/src/index.ts
-@@ -19,3 +19,10 @@ export * from "./terminal/index.ts";
+@@ -19,3 +19,11 @@ export * from "./terminal/index.ts";
  export type { OpenChartsProviderProps } from "./adapter/provider.tsx";
  export { onNotification, type Notification } from "./notifications.ts";
  export type { Candle, Order, Position, Symbol, PlaceOrderInput } from "./services/schemas.ts";
@@ -13,11 +13,200 @@ index 5c9f2c5..c3ae54f 100644
 +export { useChartPreferences } from './hooks/useChartPreferences.ts';
 +export type { DrawingLine, DrawingTool } from './pages/trading/constants.ts';
 +export type { IndicatorType } from './lib/indicators.ts';
++export { sma, ema, rsi, macd, bollingerBands, atr, stochastic, vwap } from './lib/indicators.ts';
+diff --git a/src/lib/chart-plugins/drawing-tools/manager.ts b/src/lib/chart-plugins/drawing-tools/manager.ts
+index 43c6bf6..0007bdd 100644
+--- a/src/lib/chart-plugins/drawing-tools/manager.ts
++++ b/src/lib/chart-plugins/drawing-tools/manager.ts
+@@ -1,4 +1,4 @@
+-import type { IChartApi, ISeriesApi, SeriesType } from "lightweight-charts";
++import type { IChartApi, ISeriesApi, SeriesType, UTCTimestamp } from "lightweight-charts";
+ import type {
+   DrawingLine,
+   DrawingTool,
+@@ -149,7 +149,14 @@ export class DrawingToolsManager {
+   private drag: DragState | null = null;
+   private selectedIds: string[] = [];
+   private hoveredId: string | null = null;
++  private keyboardEnabled = true;
++  setKeyboardEnabled(enabled: boolean): void {
++    this.keyboardEnabled = enabled;
++    if (!enabled) this.forgetPointer();
++  }
+   private magnetMode: MagnetMode = "none";
++  private lastPointer: { pos: Pt; shiftKey: boolean } | null = null;
++  private previewing = false;
+   private stayInMode = false;
+   private longPress: { timer: number; id: string; startPos: Pt } | null = null;
+   // The measure tool is a throwaway gesture: its result lingers as a preview
+@@ -172,6 +179,9 @@ export class DrawingToolsManager {
+     this.primitive.setAccountEquity(opts.accountEquity ?? 0);
+     this.series.attachPrimitive(this.primitive);
+     this.container.addEventListener("mousedown", this.handleMouseDown, true);
++    this.container.addEventListener("mouseleave", this.forgetPointer);
++    window.addEventListener("blur", this.handleBlur);
++    this.series.subscribeDataChanged(this.refreshSnapPreview);
+     this.container.addEventListener("dblclick", this.handleDblClick);
+     this.container.addEventListener("contextmenu", this.handleContextMenu);
+     this.container.addEventListener("touchstart", this.handleTouchStart, {
+@@ -189,6 +199,9 @@ export class DrawingToolsManager {
+   destroy(): void {
+     this.clearLongPress();
+     this.container.removeEventListener("mousedown", this.handleMouseDown, true);
++    this.container.removeEventListener("mouseleave", this.forgetPointer);
++    window.removeEventListener("blur", this.handleBlur);
++    this.series.unsubscribeDataChanged(this.refreshSnapPreview);
+     this.container.removeEventListener("dblclick", this.handleDblClick);
+     this.container.removeEventListener("contextmenu", this.handleContextMenu);
+     this.container.removeEventListener("touchstart", this.handleTouchStart, true);
+@@ -215,6 +228,7 @@ export class DrawingToolsManager {
+ 
+   setMagnetMode(mode: MagnetMode): void {
+     this.magnetMode = mode;
++    this.refreshSnapPreview();
+   }
+ 
+   setStyleDefaults(defaults: Record<string, Partial<DrawingLine>>): void {
+@@ -268,7 +282,8 @@ export class DrawingToolsManager {
+     const x = clientX - rect.left;
+     const y = clientY - rect.top;
+     const timeScale = this.chart.timeScale();
+-    const paneWidth = timeScale.width();
++    // Hidden time axes report zero widget width even when the plot is visible.
++    const paneWidth = timeScale.width() || Math.max(0, rect.width - this.chart.priceScale("right").width() - this.chart.priceScale("left").width());
+     const paneHeight = rect.height - timeScale.height();
+     if (paneWidth <= 0 || x < 0 || y < 0 || x > paneWidth || y > paneHeight) return null;
+     return { x, y };
+@@ -361,6 +376,8 @@ export class DrawingToolsManager {
+ 
+   private handleMouseMove = (e: MouseEvent): void => {
+     const pos = this.eventPos(e);
++    this.lastPointer = pos ? { pos, shiftKey: e.shiftKey } : null;
++    this.refreshSnapPreview();
+     if (this.drag) {
+       if (pos) this.dragMove(pos, e.shiftKey);
+       return;
+@@ -377,11 +394,12 @@ export class DrawingToolsManager {
+   };
+ 
+   private handleMouseUp = (e: MouseEvent): void => {
+-    if (this.drag) {
+-      this.endDrag();
+-      return;
+-    }
+-    if (this.placing) this.maybeCommitPlacement(this.eventPos(e), e.shiftKey);
++    if (this.drag) this.endDrag();
++    else if (this.placing) this.maybeCommitPlacement(this.eventPos(e), e.shiftKey);
++    // LC may restore its free cursor on mouse-down/up; reapply the same snap.
++    const pos = this.eventPos(e);
++    this.lastPointer = pos ? { pos, shiftKey: e.shiftKey } : null;
++    this.refreshSnapPreview();
+   };
+ 
+   private handleDblClick = (e: MouseEvent): void => {
+@@ -471,6 +489,7 @@ export class DrawingToolsManager {
+   // ── Keyboard ───────────────────────────────────────────────────────
+ 
+   private handleKeyDown = (e: KeyboardEvent): void => {
++    if (!this.keyboardEnabled) return;
+     if (isTextInputTarget(e.target)) return;
+     if (this.handleHistoryShortcut(e) || this.handleToolShortcut(e)) return;
+     if (this.handleClipboardShortcut(e) || this.handleArrowNudge(e)) return;
+@@ -875,6 +894,32 @@ export class DrawingToolsManager {
+     }
+   }
+ 
++  // Preview the exact resolver used by placement/anchor dragging, not LC's
++  // close-only magnet mode. It also reacts to Cmd release without mouse motion.
++  private refreshSnapPreview = (): void => {
++    const pointer = this.lastPointer;
++    if (!pointer || !this.keyboardEnabled) return;
++    if (this.magnetMode === "none" && !this.previewing) return;
++    const anchor = this.drag ? this.dragAnchorPx(this.drag) : this.placementAnchorPx();
++    const point = this.magnetMode === "none"
++      ? this.toPoint(pointer.pos)
++      : this.pointFor(pointer.pos, pointer.shiftKey, anchor);
++    if (!point) return;
++    this.chart.setCrosshairPosition(point.price, point.time as UTCTimestamp, this.series);
++    this.previewing = this.magnetMode !== "none";
++    if (this.placing) this.placingMove(pointer.pos, pointer.shiftKey);
++  };
++
++  private forgetPointer = (): void => {
++    this.lastPointer = null;
++    this.previewing = false;
++  };
++
++  private handleBlur = (): void => {
++    if (this.previewing) this.chart.clearCrosshairPosition();
++    this.forgetPointer();
++  };
++
+   // ── Snapping (Shift = 45° angle, magnet = OHLC price) ──────────────
+ 
+   /**
+diff --git a/src/pages/trading/ChartContextMenu.tsx b/src/pages/trading/ChartContextMenu.tsx
+index 2ff483f..c22d52f 100644
+--- a/src/pages/trading/ChartContextMenu.tsx
++++ b/src/pages/trading/ChartContextMenu.tsx
+@@ -1,3 +1,4 @@
++import { createPortal } from "react-dom";
+ import {
+   ArrowDownToLine,
+   ArrowUpFromLine,
+@@ -152,8 +153,8 @@ export function ChartContextMenu(props: ChartContextMenuProps) {
+     if (!el) return;
+     const rect = el.getBoundingClientRect();
+     setPos({
+-      x: Math.min(x, window.innerWidth - rect.width - 8),
+-      y: Math.min(y, window.innerHeight - rect.height - 8),
++      x: Math.max(8, Math.min(x, window.innerWidth - rect.width - 8)),
++      y: Math.max(8, Math.min(y, window.innerHeight - rect.height - 8)),
+     });
+   }, [x, y]);
+ 
+@@ -165,11 +166,11 @@ export function ChartContextMenu(props: ChartContextMenuProps) {
+     return () => window.removeEventListener("keydown", onKey);
+   }, [onClose]);
+ 
+-  return (
+-    <>
++  return createPortal(
++    <div className="opencharts" data-chart-context-layer style={{position:"fixed",inset:0,width:"auto",height:"auto",overflow:"visible",zIndex:900,pointerEvents:"none",background:"transparent"}}>
+       {/* click-away backdrop (also swallows the next right-click) */}
+       <div
+-        className="fixed inset-0 z-40"
++        className="fixed inset-0 z-40" style={{pointerEvents:"auto"}}
+         onClick={onClose}
+         onContextMenu={(e) => {
+           e.preventDefault();
+@@ -178,7 +179,7 @@ export function ChartContextMenu(props: ChartContextMenuProps) {
+       />
+       <div
+         ref={menuRef}
+-        style={{ left: pos.x, top: pos.y }}
++        style={{ left: pos.x, top: pos.y, pointerEvents:"auto",maxHeight:"calc(100dvh - 16px)",maxWidth:"calc(100vw - 16px)",overflowY:"auto" }}
+         className="fixed z-50 min-w-[230px] rounded-lg border border-border bg-card/95 py-1 shadow-2xl backdrop-blur-xl"
+       >
+         <MenuItem
+@@ -246,6 +247,6 @@ export function ChartContextMenu(props: ChartContextMenuProps) {
+           }}
+         />
+       </div>
+-    </>
++    </div>, document.body
+   );
+ }
 diff --git a/src/pages/trading/ChartPanel.tsx b/src/pages/trading/ChartPanel.tsx
-index 8de4807..501ec0b 100644
+index 8de4807..1dabcb9 100644
 --- a/src/pages/trading/ChartPanel.tsx
 +++ b/src/pages/trading/ChartPanel.tsx
-@@ -269,6 +269,10 @@ export interface ChartPanelProps {
+@@ -1,3 +1,4 @@
++import { createPortal } from "react-dom";
+ import { useQueryClient } from "@tanstack/react-query";
+ import {
+   type CandlestickData,
+@@ -269,6 +270,16 @@ export interface ChartPanelProps {
     * staleness watchdog must not treat the old last-bar as a data gap.
     */
    isReplaying?: boolean;
@@ -25,10 +214,16 @@ index 8de4807..501ec0b 100644
 +  showNews?: boolean;
 +  /** Last traded candle close when the host does not supply bid/ask quotes. */
 +  showLastPrice?: boolean;
++  onChartReady?: (value: { chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null) => void;
++  keyboardEnabled?: boolean;
++  showDrawingTools?: boolean;
++  drawingRailHost?: HTMLElement | null;
++  onMagnetToggle?: () => void;
++  onStayInDrawingModeToggle?: () => void;
  }
  
  // ── Chart plugin overlays ─────────────────────────────────────────────────────
-@@ -955,7 +959,7 @@ function ChartLegendHeader({
+@@ -955,7 +966,7 @@ function ChartLegendHeader({
    showCountdown: boolean;
  }) {
    return (
@@ -37,16 +232,22 @@ index 8de4807..501ec0b 100644
        <div className="flex items-center gap-2 text-[11px] font-mono leading-none mb-1">
          <span className="text-foreground font-bold text-[13px] tracking-tight">
            {selectedSymbol}
-@@ -1112,6 +1116,8 @@ export function ChartPanel({
+@@ -1112,6 +1123,14 @@ export function ChartPanel({
    onClearDrawings,
    onClearIndicators,
    isReplaying = false,
 +  showNews = true,
 +  showLastPrice = false,
++  onChartReady,
++  keyboardEnabled = true,
++  showDrawingTools = true,
++  drawingRailHost,
++  onMagnetToggle,
++  onStayInDrawingModeToggle,
  }: ChartPanelProps) {
    const queryClient = useQueryClient();
    const lastGapRefetchAtRef = useRef<number>(0);
-@@ -1160,7 +1166,7 @@ export function ChartPanel({
+@@ -1160,7 +1179,7 @@ export function ChartPanel({
    const [countdown, setCountdown] = useState("");
    const countdownIntervalMs = TF_INTERVAL_MS[timeframe];
    const countdownText =
@@ -55,7 +256,7 @@ index 8de4807..501ec0b 100644
    // True once the legend has been restored to the latest bar after the crosshair
    // left the series — prevents re-setting (and re-rendering) on every off-series
    // mouse move while the cursor sits outside the plotted data.
-@@ -1554,8 +1560,8 @@ export function ChartPanel({
+@@ -1554,8 +1573,8 @@ export function ChartPanel({
        // the Ask label and rounds to the same 5-decimal string. The explicit
        // Bid/Ask price lines below are the authoritative right-edge prices for
        // trading; the mid label is redundant and creates the "misaligned" look.
@@ -66,7 +267,27 @@ index 8de4807..501ec0b 100644
        priceLineWidth: 1,
        priceLineColor: "",
        priceLineStyle: LineStyle.Dotted,
-@@ -2062,7 +2068,7 @@ export function ChartPanel({
+@@ -1661,8 +1680,10 @@ export function ChartPanel({
+ 
+     // Signal listener-binding hooks that a live chart instance now exists.
+     setChartEpoch((e) => e + 1);
++    onChartReady?.({ chart, series: candleSeries });
+ 
+     return () => {
++      onChartReady?.(null);
+       historyLoadCancelled = true;
+       chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
+       ro.disconnect();
+@@ -1707,6 +1728,8 @@ export function ChartPanel({
+   // chart persists across TF switches so drawings never blink out; the
+   // TF-change effect below updates the live state in place, TradingView-style).
+ 
++  useEffect(() => { drawingManagerRef.current?.setKeyboardEnabled(keyboardEnabled); }, [keyboardEnabled, chartEpoch]);
++
+   // Update watermark text when symbol changes (visibility comes from settings)
+   useEffect(() => {
+     chartRef.current?.applyOptions({
+@@ -2062,7 +2085,7 @@ export function ChartPanel({
        />
  
        {/* News overlay (popup, config dialog, button) */}
@@ -75,7 +296,7 @@ index 8de4807..501ec0b 100644
          newsConfig={newsConfig}
          setNewsConfig={setNewsConfig}
          showNewsConfigDialog={showNewsConfigDialog}
-@@ -2072,7 +2078,7 @@ export function ChartPanel({
+@@ -2072,7 +2095,7 @@ export function ChartPanel({
          isDark={isDark}
          pipDigits={pipDigits}
          containerRef={containerRef}
@@ -84,3 +305,302 @@ index 8de4807..501ec0b 100644
  
        {/* Chart-wide right-click menu (TradingView-style) */}
        {chartMenu && (
+@@ -2112,7 +2135,7 @@ export function ChartPanel({
+       <div ref={containerRef} className="w-full h-full" onContextMenu={handleChartContextMenu} />
+ 
+       {/* Left vertical tool rail (TradingView-style grouped flyouts) */}
+-      <DrawingToolRail drawingTool={drawingTool} onDrawingTool={(t) => onDrawingToolSelect?.(t)} />
++      {showDrawingTools && (drawingRailHost ? createPortal(<DrawingToolRail drawingTool={drawingTool} onDrawingTool={(t) => onDrawingToolSelect?.(t)} magnetActive={magnetMode !== "none"} onMagnetToggle={onMagnetToggle} stayActive={stayInDrawingMode} onStayToggle={onStayInDrawingModeToggle} />, drawingRailHost) : <DrawingToolRail drawingTool={drawingTool} onDrawingTool={(t) => onDrawingToolSelect?.(t)} magnetActive={magnetMode !== "none"} onMagnetToggle={onMagnetToggle} stayActive={stayInDrawingMode} onStayToggle={onStayInDrawingModeToggle} />)}
+     </div>
+   );
+ }
+diff --git a/src/pages/trading/ChartSettingsDialog.tsx b/src/pages/trading/ChartSettingsDialog.tsx
+index c117dcb..1929107 100644
+--- a/src/pages/trading/ChartSettingsDialog.tsx
++++ b/src/pages/trading/ChartSettingsDialog.tsx
+@@ -1,3 +1,4 @@
++import { createPortal } from "react-dom";
+ import {
+   CandlestickChart,
+   Crosshair,
+@@ -8,7 +9,7 @@ import {
+   Target,
+   X,
+ } from "lucide-react";
+-import { useState, type ReactNode } from "react";
++import { useEffect, useRef, useState, type ReactNode } from "react";
+ import { type ChartPreferences, updateChartPreferences } from "../../hooks/useChartPreferences.ts";
+ import { useDragOffset } from "../../hooks/useDragOffset.ts";
+ import { cn } from "../../lib/utils.ts";
+@@ -498,6 +499,13 @@ export function ChartSettingsDialog(props: ChartSettingsDialogProps) {
+   const { open, onClose } = props;
+   const [tab, setTab] = useState<TabId>("appearance");
+   const drag = useDragOffset();
++  const dialogRef = useRef<HTMLDialogElement>(null);
++  useEffect(() => {
++    if (!open) return;
++    const dialog = dialogRef.current;
++    dialog?.showModal();
++    return () => dialog?.close();
++  }, [open]);
+   if (!open) return null;
+ 
+   const close = () => {
+@@ -506,14 +514,15 @@ export function ChartSettingsDialog(props: ChartSettingsDialogProps) {
+   };
+   const resetPayload = RESET_BY_TAB[tab];
+ 
+-  return (
++  return createPortal(
++    <dialog ref={dialogRef} className="opencharts" data-chart-settings-dialog aria-label="Chart settings" onCancel={(e) => { e.preventDefault(); close(); }} onKeyDown={(e) => e.stopPropagation()} style={{position:"fixed",inset:0,margin:0,padding:0,border:0,width:"100vw",height:"100dvh",maxWidth:"none",maxHeight:"none",overflow:"visible",background:"transparent"}}>
+     <div
+       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+       onClick={close}
+     >
+       <div
+         className="flex h-[440px] w-[560px] max-w-[94vw] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl"
+-        style={drag.style}
++        style={{...drag.style,maxHeight:"calc(100dvh - 32px)"}}
+         onClick={(e) => e.stopPropagation()}
+       >
+         {/* Drag handle header */}
+@@ -525,7 +534,7 @@ export function ChartSettingsDialog(props: ChartSettingsDialogProps) {
+             <GripVertical className="h-3.5 w-3.5 text-muted-foreground/60" />
+             <h2 className="text-sm font-semibold text-foreground">Chart Settings</h2>
+           </div>
+-          <button onClick={close} className="text-muted-foreground hover:text-foreground">
++          <button aria-label="Close chart settings" onClick={close} className="text-muted-foreground hover:text-foreground">
+             <X className="h-4 w-4" />
+           </button>
+         </div>
+@@ -573,5 +582,6 @@ export function ChartSettingsDialog(props: ChartSettingsDialogProps) {
+         </div>
+       </div>
+     </div>
++    </dialog>, document.body
+   );
+ }
+diff --git a/src/pages/trading/DrawingToolRail.tsx b/src/pages/trading/DrawingToolRail.tsx
+index e4ae382..f024f70 100644
+--- a/src/pages/trading/DrawingToolRail.tsx
++++ b/src/pages/trading/DrawingToolRail.tsx
+@@ -1,4 +1,7 @@
++import { createPortal } from "react-dom";
+ import {
++  Magnet,
++  PencilLine,
+   ArrowDownRight,
+   ArrowRight,
+   ArrowUpRight,
+@@ -102,6 +105,8 @@ function RailButton({
+     <button
+       type="button"
+       title={title}
++      aria-label={title}
++      aria-pressed={active}
+       onClick={onClick}
+       className={cn(
+         "p-1.5 rounded hover:bg-secondary",
+@@ -126,13 +131,15 @@ function RailGroup({
+   onToggle: () => void;
+   onSelect: (t: DrawingTool) => void;
+ }) {
++  const anchor = useRef<HTMLDivElement>(null);
++  const [position, setPosition] = useState({left: 40, top: 50});
+   const activeMeta = group.tools.find((t) => t.tool === activeTool);
+   const Icon = activeMeta?.icon ?? group.icon;
+   return (
+-    <div className="relative">
+-      <RailButton icon={Icon} title={group.label} active={Boolean(activeMeta)} onClick={onToggle} />
+-      {open && (
+-        <div className="absolute left-full top-0 ml-1 z-30 min-w-[180px] rounded-md bg-card border border-border shadow-xl py-1">
++    <div className="relative" ref={anchor}>
++      <RailButton icon={Icon} title={group.label} active={Boolean(activeMeta)} onClick={() => {const r=anchor.current?.getBoundingClientRect(); if(r)setPosition({left:Math.max(8,Math.min(r.right+5,window.innerWidth-232)),top:Math.max(8,Math.min(r.top,window.innerHeight-group.tools.length*34-20))});onToggle();}} />
++      {open && createPortal(
++        <div className="opencharts" data-drawing-rail-menu style={{position:"fixed",left:position.left,top:position.top,right:"auto",bottom:"auto",width:"max-content",height:"auto",maxWidth:"calc(100vw - 16px)",zIndex:1000,maxHeight:"calc(100vh - 32px)",overflowY:"auto",background:"#202124",border:"1px solid #404040",borderRadius:4,minWidth:180,padding:"4px 0",boxShadow:"0 10px 30px #0008"}}>
+           {group.tools.map((t) => (
+             <button
+               key={t.tool}
+@@ -147,7 +154,7 @@ function RailGroup({
+               {t.label}
+             </button>
+           ))}
+-        </div>
++        </div>, document.body
+       )}
+     </div>
+   );
+@@ -156,7 +163,9 @@ function RailGroup({
+ export function DrawingToolRail({
+   drawingTool,
+   onDrawingTool,
++  magnetActive = false, onMagnetToggle, stayActive = false, onStayToggle,
+ }: {
++  magnetActive?: boolean; onMagnetToggle?: () => void; stayActive?: boolean; onStayToggle?: () => void;
+   drawingTool: DrawingTool;
+   onDrawingTool: (t: DrawingTool) => void;
+ }) {
+@@ -168,7 +177,7 @@ export function DrawingToolRail({
+   useEffect(() => {
+     if (!openGroup) return;
+     const handler = (e: MouseEvent) => {
+-      if (ref.current && !ref.current.contains(e.target as Node)) setOpenGroup(null);
++      if (ref.current && !ref.current.contains(e.target as Node) && !(e.target as Element).closest("[data-drawing-rail-menu]")) setOpenGroup(null);
+     };
+     document.addEventListener("mousedown", handler);
+     return () => document.removeEventListener("mousedown", handler);
+@@ -232,6 +241,8 @@ export function DrawingToolRail({
+         />
+       ))}
+       <div className="my-0.5 w-full border-t border-border/50" />
++      {onMagnetToggle && <RailButton icon={Magnet} title="Magnet · hold Cmd/Ctrl for temporary snap" active={magnetActive} onClick={onMagnetToggle} />}
++      {onStayToggle && <RailButton icon={PencilLine} title="Stay in drawing mode" active={stayActive} onClick={onStayToggle} />}
+       <RailButton icon={EyeOff} title="Hide toolbar" onClick={hide} />
+     </div>
+   );
+diff --git a/src/pages/trading/constants.ts b/src/pages/trading/constants.ts
+index d7f5c15..71a17c7 100644
+--- a/src/pages/trading/constants.ts
++++ b/src/pages/trading/constants.ts
+@@ -13,12 +13,12 @@ export const REPLAY_ENABLED = true;
+ 
+ export const CHART_COLORS = {
+   dark: {
+-    background: "#0b0e14",
++    background: "#101010",
+     text: "#9298a5",
+-    grid: "#151923",
++    grid: "#1b1b1b",
+     crosshair: "#555c68",
+-    up: "#0ecb81",
+-    down: "#f6465d",
++    up: "#26a69a",
++    down: "#ef5350",
+     volumeUp: "rgba(14, 203, 129, 0.18)",
+     volumeDown: "rgba(246, 70, 93, 0.18)",
+     bidLine: "#0ecb81",
+@@ -39,8 +39,8 @@ export const CHART_COLORS = {
+     text: "#5d6068",
+     grid: "#f0f2f5",
+     crosshair: "#999",
+-    up: "#0ecb81",
+-    down: "#f6465d",
++    up: "#26a69a",
++    down: "#ef5350",
+     volumeUp: "rgba(14, 203, 129, 0.25)",
+     volumeDown: "rgba(246, 70, 93, 0.25)",
+     bidLine: "#0ecb81",
+diff --git a/src/__tests__/drawing-pane.test.ts b/src/__tests__/drawing-pane.test.ts
+new file mode 100644
+index 0000000..d16d1ea
+--- /dev/null
++++ b/src/__tests__/drawing-pane.test.ts
+@@ -0,0 +1,9 @@
++import {expect,it} from 'vitest';
++import {DrawingToolsManager} from '../lib/chart-plugins/drawing-tools/manager';
++it('accepts drawing points when the time axis is hidden by oscillator subpanes',()=>{
++ const manager=Object.create(DrawingToolsManager.prototype) as any;
++ manager.container={getBoundingClientRect:()=>({left:0,top:240,width:1280,height:230})};
++ manager.chart={timeScale:()=>({width:()=>0,height:()=>0}),priceScale:(side:string)=>({width:()=>side==='right'?80:0})};
++ expect(manager.posFromClient(500,350)).toEqual({x:500,y:110});
++ expect(manager.posFromClient(1250,350)).toBeNull();
++});
+diff --git a/src/__tests__/workspace-overlays.test.tsx b/src/__tests__/workspace-overlays.test.tsx
+new file mode 100644
+index 0000000..3e81c4d
+--- /dev/null
++++ b/src/__tests__/workspace-overlays.test.tsx
+@@ -0,0 +1,35 @@
++import {render,screen,fireEvent,cleanup} from '@testing-library/react';
++import {afterEach,expect,it,vi} from 'vitest';
++import {ChartContextMenu} from '../pages/trading/ChartContextMenu';
++import {DrawingToolRail} from '../pages/trading/DrawingToolRail';
++import {ChartSettingsDialog} from '../pages/trading/ChartSettingsDialog';
++import {getChartPreferencesFromStorage} from '../hooks/useChartPreferences';
++afterEach(()=>{cleanup();vi.restoreAllMocks()});
++it('sizes the portaled drawing menu independently of the full-size runtime root',()=>{
++ const {container}=render(<DrawingToolRail drawingTool="none" onDrawingTool={()=>{}}/>);
++ fireEvent.click(screen.getByRole('button',{name:'Lines'}));
++ const menu=document.querySelector<HTMLElement>('[data-drawing-rail-menu]')!;
++ expect(menu).not.toBeNull();expect(container.contains(menu)).toBe(false);
++ expect(menu.style.width).toBe('max-content');expect(menu.style.height).toBe('auto');
++ expect(menu.style.right).toBe('auto');expect(menu.style.bottom).toBe('auto');
++ expect(menu.style.maxWidth).toBe('calc(100vw - 16px)');
++});
++it('opens chart settings in the modal top layer outside a clipped chart cell',()=>{
++ const showModal=vi.fn(function(this:HTMLDialogElement){this.open=true}),close=vi.fn();
++ Object.defineProperty(HTMLDialogElement.prototype,'showModal',{configurable:true,value:showModal});
++ Object.defineProperty(HTMLDialogElement.prototype,'close',{configurable:true,value:close});
++ const onClose=vi.fn();
++ const {container,unmount}=render(<div style={{overflow:'hidden',position:'relative',zIndex:1}}><ChartSettingsDialog open onClose={onClose} prefs={getChartPreferencesFromStorage()} isDark activePlugins={[]} hasAccount={false} onOpenNewsConfig={()=>{}}/></div>);
++ const dialog=screen.getByRole('dialog',{name:'Chart settings'});
++ expect(dialog.tagName).toBe('DIALOG');expect(dialog.parentElement).toBe(document.body);
++ expect(container.contains(dialog)).toBe(false);expect(showModal).toHaveBeenCalledOnce();
++ fireEvent(dialog,new Event('cancel',{bubbles:false,cancelable:true}));expect(onClose).toHaveBeenCalledOnce();
++ unmount();expect(close).toHaveBeenCalledOnce();
++});
++it('keeps the context-menu settings action outside chart-cell clipping and splitters',()=>{
++ const open=vi.fn();
++ const {container}=render(<div style={{overflow:'hidden'}}><ChartContextMenu x={400} y={300} price={100} pipDigits={2} symbol="BTCUSDT" drawingsCount={0} indicatorsCount={0} onClose={()=>{}} onResetView={()=>{}} onCopyPrice={()=>{}} onOpenObjectTree={()=>{}} onOpenSettings={open}/></div>);
++ const layer=document.querySelector('[data-chart-context-layer]');
++ expect(layer?.parentElement).toBe(document.body);expect(container.contains(layer)).toBe(false);
++ fireEvent.click(screen.getByRole('button',{name:'Chart Settings…'}));expect(open).toHaveBeenCalledOnce();
++});
+diff --git a/src/__tests__/drawing-magnet.test.ts b/src/__tests__/drawing-magnet.test.ts
+new file mode 100644
+index 0000000..f0d13cb
+--- /dev/null
++++ b/src/__tests__/drawing-magnet.test.ts
+@@ -0,0 +1,52 @@
++import {afterEach,expect,it,vi} from 'vitest';
++import {DrawingToolsManager} from '../lib/chart-plugins/drawing-tools/manager';
++const managers:DrawingToolsManager[]=[];afterEach(()=>{for(const m of managers.splice(0))m.destroy()});
++function fixture(){
++ const bar={time:60,open:100,high:120,low:80,close:110};
++ const preview=vi.fn(),add=vi.fn();
++ const chart={timeScale:()=>({width:()=>420,height:()=>20}),setCrosshairPosition:preview,clearCrosshairPosition:vi.fn()};
++ const series={subscribeDataChanged:vi.fn(),unsubscribeDataChanged:vi.fn(),attachPrimitive:vi.fn(),detachPrimitive:vi.fn(),data:()=>[bar],priceToCoordinate:(p:number)=>200-p};
++ const container=document.createElement("div");container.getBoundingClientRect=()=>({left:0,top:0,width:500,height:300}) as DOMRect;
++ const manager=new DrawingToolsManager({chart,series,container,intervalSec:60,timeframe:"1m",callbacks:{onAdd:add,onToolFinished:vi.fn(),onSelectionChange:vi.fn()}} as any) as any;managers.push(manager);
++ manager.toPoint=(p:{x:number;y:number})=>({time:60,price:200-p.y});
++ manager.primitive={setPreview:vi.fn(),setDrawings:vi.fn(),setSelected:vi.fn()};manager.cb={onAdd:add,onToolFinished:vi.fn(),onSelectionChange:vi.fn()};
++ manager.drawings=[];manager.selectedIds=[];manager.drag=null;manager.placing=null;manager.measureResult=null;manager.styleDefaults={};manager.keyboardEnabled=true;manager.tool='horizontal';manager.intervalSec=60;manager.timeframe='1m';manager.magnetMode='none';manager.lastPointer=null;manager.previewing=false;
++ const move=(y:number)=>manager.handleMouseMove(new MouseEvent('mousemove',{clientX:100,clientY:y}));
++ return {manager,bar,move,preview,add};
++}
++it('previews exactly the OHLC anchor the next click commits',()=>{
++ const {manager,move,preview,add}=fixture();manager.setMagnetMode('strong');move(87);
++ expect(preview).toHaveBeenLastCalledWith(110,60,manager.series);
++ manager.handleMouseDown(new MouseEvent('mousedown',{clientX:100,clientY:87,button:0}));
++ expect(add.mock.calls[0][0].price).toBe(preview.mock.calls.at(-1)![0]);
++});
++it('weak magnet follows free price outside its threshold and snaps when close',()=>{
++ const {manager,move,preview}=fixture();manager.setMagnetMode('weak');move(20);
++ expect(preview).toHaveBeenLastCalledWith(180,60,manager.series);
++ move(87);expect(preview).toHaveBeenLastCalledWith(110,60,manager.series);
++});
++it('modifier on/off refreshes a stationary cursor and restores its free price',()=>{
++ const {manager,move,preview}=fixture();move(87);expect(preview).not.toHaveBeenCalled();
++ manager.setMagnetMode('weak');expect(preview).toHaveBeenLastCalledWith(110,60,manager.series);
++ manager.setMagnetMode('none');expect(preview).toHaveBeenLastCalledWith(113,60,manager.series);
++});
++it('inactive charts and stale pointers never override another charts crosshair',()=>{
++ const {manager,move,preview}=fixture();manager.setKeyboardEnabled(false);manager.setMagnetMode('strong');move(87);expect(preview).not.toHaveBeenCalled();
++ manager.setKeyboardEnabled(true);move(87);preview.mockClear();
++ manager.handleMouseMove(new MouseEvent('mousemove',{clientX:700,clientY:87}));manager.setMagnetMode('none');expect(preview).not.toHaveBeenCalled();
++});
++it('refreshes the preview against a growing live candle without pointer movement',()=>{
++ const {manager,bar,move,preview}=fixture();manager.setMagnetMode('strong');move(87);
++ bar.close=114;manager.series.subscribeDataChanged.mock.calls[0][0]();
++ expect(preview).toHaveBeenLastCalledWith(114,60,manager.series);
++});
++it('forgets the pointer on blur so releasing Cmd cannot revive a stale preview',()=>{
++ const {manager,move,preview}=fixture();manager.setMagnetMode('strong');move(87);
++ window.dispatchEvent(new Event('blur'));expect(manager.chart.clearCrosshairPosition).toHaveBeenCalledOnce();
++ preview.mockClear();manager.setMagnetMode('none');expect(preview).not.toHaveBeenCalled();
++});
++it('keeps the snapped crosshair after the chart processes a mouse click',()=>{
++ const {manager,move,preview}=fixture();manager.setMagnetMode('strong');move(87);preview.mockClear();
++ manager.handleMouseUp(new MouseEvent('mouseup',{clientX:100,clientY:87,button:0}));
++ expect(preview).toHaveBeenLastCalledWith(110,60,manager.series);
++});

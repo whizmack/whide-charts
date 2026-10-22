@@ -1,0 +1,286 @@
+{
+  "date": "2026-10-20T15:59:53.193Z",
+  "browser": "153.0.8010.36",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "position": {
+    "original": [
+      {
+        "time": 1683876757.8947368,
+        "price": 26417.30977672975
+      },
+      {
+        "time": 1683881532.9371817,
+        "price": 26626.609783970027
+      },
+      {
+        "time": 1683881532.9371817,
+        "price": 26312.659773109615
+      }
+    ],
+    "entry": [
+      {
+        "time": 1683876757.8947368,
+        "price": 26367.077774992085
+      },
+      {
+        "time": 1683881532.9371817,
+        "price": 26626.609783970027
+      },
+      {
+        "time": 1683881532.9371817,
+        "price": 26312.659773109615
+      }
+    ],
+    "target": [
+      {
+        "time": 1683876757.8947368,
+        "price": 26367.077774992085
+      },
+      {
+        "time": 1683881532.9371817,
+        "price": 26710.32978686614
+      },
+      {
+        "time": 1683881532.9371817,
+        "price": 26312.659773109615
+      }
+    ],
+    "stop": [
+      {
+        "time": 1683876757.8947368,
+        "price": 26367.077774992085
+      },
+      {
+        "time": 1683881532.9371817,
+        "price": 26710.32978686614
+      },
+      {
+        "time": 1683881532.9371817,
+        "price": 26228.939770213503
+      }
+    ],
+    "undoRedo": true
+  },
+  "rsiDialog": "RSI settings\nInputs\nStyle\nLength\nSource\nClose\nOpen\nHigh\nLow\nHL2\nHLC3\nOHLC4\nColor\nOverbought\nOversold\nBackground\nTimeframe?\nChart\n1m\n3m\n5m\n15m\n30m\n1h\n2h\n4h\n1d\n1w\nDefaults\nCancel\nOK",
+  "panes": {
+    "before": [
+      {
+        "weight": 7,
+        "priceScale": {
+          "marginTop": 0.1,
+          "marginBottom": 0.1,
+          "minMove": 0,
+          "minPrecision": 0,
+          "mode": "linear",
+          "inverted": false,
+          "autoScale": true,
+          "fixedRange": null,
+          "placement": {
+            "side": "right",
+            "order": 0
+          }
+        }
+      },
+      {
+        "weight": 1,
+        "priceScale": {
+          "marginTop": 0.1,
+          "marginBottom": 0.1,
+          "minMove": 0,
+          "minPrecision": 2,
+          "mode": "linear",
+          "inverted": false,
+          "autoScale": true,
+          "fixedRange": null,
+          "placement": {
+            "side": "right",
+            "order": 0
+          }
+        }
+      },
+      {
+        "weight": 2,
+        "priceScale": {
+          "marginTop": 0.1,
+          "marginBottom": 0.1,
+          "minMove": 0,
+          "minPrecision": 2,
+          "mode": "linear",
+          "inverted": false,
+          "autoScale": false,
+          "fixedRange": {
+            "min": 0,
+            "max": 100
+          },
+          "placement": {
+            "side": "right",
+            "order": 0
+          },
+          "range": {
+            "min": 0,
+            "max": 100
+          },
+          "indicatorRange": {
+            "instanceId": "rsi-4",
+            "manual": false
+          }
+        }
+      },
+      {
+        "weight": 2,
+        "priceScale": {
+          "marginTop": 0.1,
+          "marginBottom": 0.1,
+          "minMove": 0,
+          "minPrecision": 2,
+          "mode": "linear",
+          "inverted": false,
+          "autoScale": true,
+          "fixedRange": null,
+          "placement": {
+            "side": "right",
+            "order": 0
+          }
+        }
+      }
+    ],
+    "after": [
+      {
+        "weight": 7,
+        "priceScale": {
+          "marginTop": 0.1,
+          "marginBottom": 0.1,
+          "minMove": 0,
+          "minPrecision": 0,
+          "mode": "linear",
+          "inverted": false,
+          "autoScale": true,
+          "fixedRange": null,
+          "placement": {
+            "side": "right",
+            "order": 0
+          }
+        }
+      },
+      {
+        "weight": 1,
+        "priceScale": {
+          "marginTop": 0.1,
+          "marginBottom": 0.1,
+          "minMove": 0,
+          "minPrecision": 2,
+          "mode": "linear",
+          "inverted": false,
+          "autoScale": true,
+          "fixedRange": null,
+          "placement": {
+            "side": "right",
+            "order": 0
+          }
+        }
+      },
+      {
+        "weight": 2,
+        "priceScale": {
+          "marginTop": 0.1,
+          "marginBottom": 0.1,
+          "minMove": 0,
+          "minPrecision": 2,
+          "mode": "linear",
+          "inverted": false,
+          "autoScale": false,
+          "fixedRange": {
+            "min": 0,
+            "max": 100
+          },
+          "placement": {
+            "side": "right",
+            "order": 0
+          },
+          "range": {
+            "min": 0,
+            "max": 100
+          },
+          "indicatorRange": {
+            "instanceId": "rsi-4",
+            "manual": false
+          }
+        }
+      },
+      {
+        "weight": 2,
+        "priceScale": {
+          "marginTop": 0.1,
+          "marginBottom": 0.1,
+          "minMove": 0,
+          "minPrecision": 2,
+          "mode": "linear",
+          "inverted": false,
+          "autoScale": true,
+          "fixedRange": null,
+          "placement": {
+            "side": "right",
+            "order": 0
+          }
+        }
+      }
+    ]
+  },
+  "paneResizeConfirmed": false,
+  "magnet": "off → weak → strong → off; Control release leaves off",
+  "navigation": {
+    "zoom": {
+      "from": 1683851100,
+      "to": 1683888600
+    },
+    "pan": {
+      "from": 1683861736.8541722,
+      "to": 1683888600
+    }
+  },
+  "reload": true,
+  "pending": "Financial chart, 0 bars\nLoading safe projection…",
+  "partial": {
+    "minutes": 25,
+    "hour": {
+      "time": 1683885600000,
+      "open": 26368.7,
+      "high": 26418.3,
+      "low": 26348.6,
+      "close": 26372.9,
+      "volume": 5563.881
+    }
+  },
+  "sync": {
+    "viewA": {
+      "from": 1683760615.2133582,
+      "to": 1683873115.2133582
+    },
+    "viewB": {
+      "from": 1683760615.2133582,
+      "to": 1683873115.2133582
+    }
+  },
+  "crosshairLinked": true,
+  "settingsBox": {
+    "x": 659.5,
+    "y": 427,
+    "width": 600,
+    "height": 237
+  },
+  "cutoffs": [
+    "1683892800000",
+    "1683892800000",
+    "1683892800000",
+    "1683892800000"
+  ],
+  "narrow": true,
+  "live": "Financial chart, 1000 bars, latest price 82599.90\nlive",
+  "returnCutoff": "2023-05-12T12:00",
+  "sessionUnchanged": true,
+  "errors": [],
+  "passed": true
+}

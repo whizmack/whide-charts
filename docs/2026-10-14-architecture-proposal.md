@@ -32,6 +32,12 @@ Verze enginu a závislostí se ukládá; aktualizace není automatická uprostř
 Desktopový wrapper lze doplnit po funkčním replayi, pokud bude samostatná .app
 žádoucí. Základní aplikace nebude potřebovat Docker.
 
+**Doplnění 20. 10. 2026:** samostatná macOS `.app` je chtěná. Shell bude
+**Electron** (stejný kontejner jako TradingView Desktop), React UI a Python
+sidecar beze změny HTTP `/api`. Tauri odloženo kvůli WKWebView u canvas grafů.
+Rozhodnutí a rozsah: `docs/superpowers/plans/2026-10-20-desktop-electron.md`.
+Implementace až na výslovné zadání.
+
 ## Společná data
 
 - Kanonický market identifikátor obsahuje burzu, USD-M perpetual a symbol.
