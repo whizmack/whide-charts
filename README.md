@@ -83,7 +83,8 @@ Pro oddělený vývoj spusťte backend s `PERP_REPLAY_DATA_DIR="$PWD/.data"` a
 
 [Architektura](docs/2026-10-14-architecture-proposal.md) ·
 [Technický audit](docs/2026-10-14-technical-audit.md) ·
-[Implementační plán](docs/superpowers/plans/2026-10-14-replay.md)
+[Implementační plán](docs/superpowers/plans/2026-10-14-replay.md) ·
+[TradingView UI reference screenshots](docs/reference/tradingview/README.md)
 
 ## Live / Replay
 

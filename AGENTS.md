@@ -20,6 +20,8 @@ nepotřebuje účet ani API klíče a zatím nemá engine vyhodnocující obchod
   vizuální kompozici co nejbližší dodaným TradingView desktop screenshotům:
   horní lištu, kreslicí nástroje vlevo, utility vpravo, spodní lištu, tmavý graf,
   watchlist, nastavení, indikátory, kreslicí menu a Replay ovládání.
+  Kanonické screenshoty jsou v `docs/reference/tradingview/README.md`; před
+  vizuální změnou otevři příslušné obrázky z tohoto indexu.
   Nevymýšlej vizuální rozložení tam, kde screenshoty dávají referenci.
   Zachovej kompaktní TradingView-like
   terminál: tmavé ploché rozhraní, úzké lišty, jemné dělicí čáry, čitelná čísla,
@@ -70,6 +72,7 @@ Neuváděj návrh jako hotovou funkci ani nevracej novější práci podle star�
 | `docs/2026-10-14-architecture-proposal.md` | Základní replay/datové invarianty, schválený směr journalu a quant etapy. Část původního rozsahu už neplatí. |
 | `docs/2026-10-14-technical-audit.md`, `docs/2026-10-14-chart-alternatives.md` | Historický průzkum knihoven, jejich omezení a původu. Verze a externí závěry nejsou automaticky aktuální. |
 | `docs/*verification.md` | Pozorované výsledky, testovací scénáře a omezení konkrétní etapy. Čti nejnovější relevantní report. |
+| `docs/reference/tradingview/README.md` | Uživatelem dodané TradingView desktop reference z 2026-10-22; index jednotlivých screenshotů a oblastí UI, kterým odpovídají. |
 | `docs/superpowers/plans/` | Implementační plány replaye, Live, OpenCharts, multi-chart/indicator workspace a Electron desktop shellu. Nejsou automatickým zadáním další práce. |
 | `docs/superpowers/plans/2026-10-20-desktop-electron.md` | Rozhodnutí: macOS `.app` jako Electron + Python sidecar, TV-like cíl, Tauri odloženo. Zatím jen záznam, ne implementace. |
 | `docs/progress.md`, `docs/*.jpg` | Historie rozhodnutí a obrazové důkazy. Neúplný průběžný záznam, nikoli aktuální test runner. |
