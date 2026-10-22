@@ -1,0 +1,151 @@
+{
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "dataIdentical": true,
+  "requests": [
+    "http://127.0.0.1:8765/api/bars?symbol=BTCUSDT&timeframe=5m&asOf=1683887100000&version=6c2457c7739df1dd0f4b2eb794e9217a10e91010ad73a22e96138938ab7bf046&limit=1000",
+    "http://127.0.0.1:8765/api/bars?symbol=BTCUSDT&timeframe=5m&asOf=1683887100000&version=6c2457c7739df1dd0f4b2eb794e9217a10e91010ad73a22e96138938ab7bf046&limit=1000",
+    "http://127.0.0.1:8765/api/bars?symbol=BTCUSDT&timeframe=5m&asOf=1683887100000&version=6c2457c7739df1dd0f4b2eb794e9217a10e91010ad73a22e96138938ab7bf046&limit=1000"
+  ],
+  "openalgo": {
+    "canvas": [
+      {
+        "x": 44,
+        "y": 106,
+        "width": 1234,
+        "height": 333,
+        "top": 106,
+        "right": 1278,
+        "bottom": 439,
+        "left": 44
+      },
+      {
+        "x": 44,
+        "y": 106,
+        "width": 1234,
+        "height": 333,
+        "top": 106,
+        "right": 1278,
+        "bottom": 439,
+        "left": 44
+      },
+      {
+        "x": 44,
+        "y": 440,
+        "width": 1234,
+        "height": 47,
+        "top": 440,
+        "right": 1278,
+        "bottom": 487,
+        "left": 44
+      },
+      {
+        "x": 44,
+        "y": 440,
+        "width": 1234,
+        "height": 47,
+        "top": 440,
+        "right": 1278,
+        "bottom": 487,
+        "left": 44
+      },
+      {
+        "x": 44,
+        "y": 487,
+        "width": 1234,
+        "height": 95,
+        "top": 487,
+        "right": 1278,
+        "bottom": 582,
+        "left": 44
+      },
+      {
+        "x": 44,
+        "y": 487,
+        "width": 1234,
+        "height": 95,
+        "top": 487,
+        "right": 1278,
+        "bottom": 582,
+        "left": 44
+      },
+      {
+        "x": 44,
+        "y": 582,
+        "width": 1234,
+        "height": 95,
+        "top": 582,
+        "right": 1278,
+        "bottom": 677,
+        "left": 44
+      },
+      {
+        "x": 44,
+        "y": 582,
+        "width": 1234,
+        "height": 95,
+        "top": 582,
+        "right": 1278,
+        "bottom": 677,
+        "left": 44
+      }
+    ],
+    "view": {
+      "from": 1683851100,
+      "to": 1683888600
+    }
+  },
+  "opencharts": {
+    "canvas": [
+      {
+        "x": 0,
+        "y": 74,
+        "width": 1178,
+        "height": 232,
+        "top": 74,
+        "right": 1178,
+        "bottom": 306,
+        "left": 0
+      },
+      {
+        "x": 0,
+        "y": 74,
+        "width": 1178,
+        "height": 232,
+        "top": 74,
+        "right": 1178,
+        "bottom": 306,
+        "left": 0
+      },
+      {
+        "x": 1178,
+        "y": 74,
+        "width": 80,
+        "height": 232,
+        "top": 74,
+        "right": 1258,
+        "bottom": 306,
+        "left": 1178
+      },
+      {
+        "x": 1178,
+        "y": 74,
+        "width": 80,
+        "height": 232,
+        "top": 74,
+        "right": 1258,
+        "bottom": 306,
+        "left": 1178
+      }
+    ],
+    "view": {
+      "chart-1:replay": {
+        "from": 1683851793,
+        "to": 1683888600
+      }
+    }
+  },
+  "normalization": "OpenCharts test-only grid width 1258px leaves 1178px plot after its 80px price axis. OpenAlgo plot is its 1234px canvas minus 56px axis. Both snapshots use the same [from,to] epoch-second view and verified identical 1000-bar /api/bars payload. No persisted appearance changed."
+}
