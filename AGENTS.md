@@ -28,6 +28,13 @@ nepotřebuje účet ani API klíče a zatím nemá engine vyhodnocující obchod
   minimum animací. Nepřidávej marketingové sekce ani rozměrné dashboard karty.
 - Zachovej uživatelův zoom, pan, vzhled, kresby a uložená nastavení. Screenshot
   je reference kompozice, nikoli příkaz změnit šířku svíček nebo browser zoom.
+- První souvislá TradingView-like úprava workspace shellu byla dokončena a
+  ověřena 2026-10-23. Aktuální stav, pokrytí browser scénářů a známá omezení
+  jsou v `docs/2026-10-23-tradingview-shell-verification.md`.
+- Primární drawing rail je od 2026-10-24 jeden fixní 40px sloupec vlevo od
+  celého workspace gridu. Nemění polohu s aktivní cell, layoutem ani maximize;
+  vždy ovládá pouze aktivní chart. Není draggable ani skrývatelný. Případná
+  budoucí pohyblivá lišta smí být jen samostatná Favorites lišta.
 - **OpenCharts je hlavní rozhraní na `/`.** Uživatel výslovně zvolil cutover
   2026-10-22. Neimportuj Vela ani OpenAlgo nastavení/kresby; uživatel potvrdil,
   že nemá žádné, které chce zachovat. Historii trhu, její cestu, SQLite katalog,

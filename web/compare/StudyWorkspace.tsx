@@ -11,10 +11,10 @@ const emptyIndicators:IndicatorType[]=[]
 const style=(s:StudySettings)=>s.style==='solid'?LineStyle.Solid:s.style==='dotted'?LineStyle.Dotted:LineStyle.Dashed
 const data=(points:{time:number;value:number;color?:string}[])=>points.map(p=>({...p,time:p.time as UTCTimestamp}))
 type Main={chart:IChartApi;series:ISeriesApi<'Candlestick'>}
-type Props={cell:string;bars:Bar[];bus:ChartBus;settings:SettingsMap;active:IndicatorType[];onSettings:(type:IndicatorType,v:StudySettings)=>void;onEdit:(type:IndicatorType)=>void;onRemove:(type:IndicatorType)=>void;panel:ComponentProps<typeof ChartPanel>}
-export function StudyWorkspace({cell,bars,bus,settings,active,onSettings,onEdit,onRemove,panel}:Props){
+type Props={cell:string;bars:Bar[];bus:ChartBus;settings:SettingsMap;active:IndicatorType[];onSettings:(type:IndicatorType,v:StudySettings)=>void;onEdit:(type:IndicatorType)=>void;onRemove:(type:IndicatorType)=>void;drawingRailHost:HTMLDivElement|null;panel:ComponentProps<typeof ChartPanel>}
+export function StudyWorkspace({cell,bars,bus,settings,active,onSettings,onEdit,onRemove,drawingRailHost,panel}:Props){
  const [hoverTime,setHoverTime]=useState<number|null>(null)
- const [main,setMain]=useState<Main|null>(null),[railHost,setRailHost]=useState<HTMLDivElement|null>(null),[height,setHeight]=useState(0);const workspace=useRef<HTMLDivElement>(null)
+ const [main,setMain]=useState<Main|null>(null),[height,setHeight]=useState(0);const workspace=useRef<HTMLDivElement>(null)
  useEffect(()=>{const el=workspace.current;if(!el)return;const observer=new ResizeObserver(()=>setHeight(el.clientHeight));observer.observe(el);return()=>observer.disconnect()},[])
  const barRef=useRef(bars);barRef.current=bars
  const ready=useCallback((m:Main|null)=>{bus.remove(cell+':price');if(m){m.chart.applyOptions({crosshair:{mode:CrosshairMode.Normal}});const b=barRef.current;bus.add({onHover:setHoverTime,id:cell+':price',cell,...m,times:b.map(v=>v.time/1000),values:new Map(b.map(v=>[v.time/1000,v.close])),width:MINUTES[panel.timeframe as Timeframe]*60})}setMain(m)},[bus,cell,panel.timeframe])
@@ -37,9 +37,8 @@ export function StudyWorkspace({cell,bars,bus,settings,active,onSettings,onEdit,
  const total=osc.reduce((sum,t)=>sum+resolved[t].height,0),budget=height?Math.min(total,Math.max(72*osc.length,Math.max(height*.52,height-220))):total
  function pane(type:IndicatorType){return <OscillatorPane renderedHeight={total?Math.max(72,Math.round(resolved[type].height*budget/total)):170} key={type} cell={cell} type={type} bars={bars} settings={resolved[type]} bus={bus} timeframe={panel.timeframe as Timeframe} bottom={last===type} onSettings={v=>onSettings(type,v)} onEdit={()=>onEdit(type)} onRemove={()=>onRemove(type)}/>}
  return <div ref={workspace} className="study-workspace">
-  <div ref={setRailHost} className="drawing-rail-host"/>
   {above.map(pane)}
-  <div className="price-pane" key="price"><ChartPanel {...panel} drawingRailHost={railHost} activeIndicators={emptyIndicators} onChartReady={ready}/>
+  <div className="price-pane" key="price"><ChartPanel {...panel} drawingRailHost={drawingRailHost} activeIndicators={emptyIndicators} onChartReady={ready}/>
    <BarCloseCountdown timeframe={panel.timeframe as Timeframe} chart={main?.chart??null} series={main?.series??null} last={bars.at(-1)}/>
    <div className="overlay-legends">{overlays.map(t=><StudyLegend key={t} type={t} settings={resolved[t]} values={computed[t].lines.map(l=>hoverTime===null?l.data.at(-1)?.value:l.data.find(p=>p.time===hoverTime)?.value)} onEdit={()=>onEdit(t)} onRemove={()=>onRemove(t)}/>)}</div>
   </div>
