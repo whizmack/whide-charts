@@ -160,3 +160,23 @@ Added public Binance USD-M live candles alongside isolated replay, automatic sta
   `50f2736842d2c3abf5e7b07f3c7fcb612021997d3e8c29649faba2145e6ca99b`.
 - Verification details: `docs/2026-10-26-interface-alignment-verification.md`.
   Favorites remains next; no commit was created.
+
+## 2026-10-27 — Replay loading and Live resume
+
+- Replay forward steps now keep the previous safe frame visible while the next
+  request resolves. The loading overlay appears only when there is no safe
+  frame; rewind still hides bars beyond the cutoff immediately.
+- `LiveFeed` starts REST history hydration alongside the WebSocket handshake.
+  `livePool` retains each pair/timeframe's latest rolling window in process
+  memory after the last chart unsubscribes, while stopping its socket and
+  recovery timers. Returning to the same Live selection renders the cached
+  window immediately and reconnects. The cache is not persisted, so the first
+  Live load after app restart still depends on Binance.
+- Verified Next and Play in the installed Electron app without the transient
+  Replay loading overlay. After Live had hydrated, switching Replay → Live
+  rendered the cached candles on first observation (~0.7 s), then recovered
+  from a brief stale/reconnecting status to Live. The original paused Replay
+  workspace was restored afterwards.
+- Verification: `npm test` 61 passed / 2 skipped; `npm run typecheck` and
+  `npm run build` passed; `uv run pytest -q` 32 passed with one existing
+  Starlette/httpx deprecation warning.

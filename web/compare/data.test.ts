@@ -1,5 +1,5 @@
 import { expect,it } from 'vitest'
-import { chartWindow, visibleDrawings } from './data'
+import { chartWindow, cellMessage, visibleDrawings } from './data'
 const bar=(time:number)=>({time,open:100,high:102,low:99,close:101,volume:5})
 it('converts milliseconds once and respects exclusive pagination bounds',()=>{
   const frame={symbol:'BTCUSDT',timeframe:'5m',bars:[bar(300000),bar(600000),bar(900000)]}
@@ -15,4 +15,13 @@ it('hides future replay drawings but leaves live drawings independent of the buc
   const drawings=[{id:'past',asOf:100},{id:'future',asOf:300}]
   expect(visibleDrawings(drawings,'replay',200).map(d=>d.id)).toEqual(['past'])
   expect(visibleDrawings(drawings,'live',0)).toEqual(drawings)
+})
+it('does not cover a safe replay frame while the next forward cutoff loads',()=>{
+  expect(cellMessage('replay',false,true,'')).toBeNull()
+})
+it('keeps the replay loading message when no safe frame can be painted',()=>{
+  expect(cellMessage('replay',false,false,'')).toBe('Loading safe replay candles…')
+})
+it('keeps replay errors visible even when an older safe frame remains painted',()=>{
+  expect(cellMessage('replay',false,true,'History is unavailable')).toBe('History is unavailable')
 })

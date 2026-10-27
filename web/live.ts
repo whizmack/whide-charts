@@ -45,7 +45,7 @@ export class LiveFeed {
   start() { if (this.running) return;this.running=true;this.connect() }
   private connect() {
     if (!this.running) return
-    const generation=++this.generation, started=Date.now(), width=MINUTES[this.timeframe]*60000
+    const generation=++this.generation, started=Date.now(), width=MINUTES[this.timeframe]*60000, hasExistingBars=this.state.bars.length>0
     let received=started, hydrated=false, eventTime=0
     const buffered=new Map<number,{bar:Bar;eventTime:number}>()
     const current=()=>this.running && generation===this.generation
@@ -61,20 +61,7 @@ export class LiveFeed {
     socket.onclose=()=>fail();socket.onerror=()=>fail()
     socket.onopen=()=>{
       if (!current()) return
-      this.publish({status:this.state.bars.length?'stale':'syncing'})
-      this.abort=new AbortController()
-      void this.deps.load(this.abort.signal).then(bars=>{
-        if (!current()) return
-        // Replace the complete rolling window, including missed closed candles.
-        // Buffered stream events win over the REST snapshot during hydration.
-        const merged=new Map(bars.map(b=>[b.time,b]))
-        for (const {bar} of buffered.values()) if(bar.time>=bars[0].time) merged.set(bar.time,bar)
-        const result=[...merged.values()].sort((a,b)=>a.time-b.time).slice(-1000)
-        if (result.some((b,i)=>i>0 && b.time!==result[i-1].time+width)) {fail('Backfilling missing candles…');return}
-        hydrated=true
-        this.publish({bars:result,status:buffered.size?'live':'syncing',lastUpdate:buffered.size?received:null,error:''})
-        if(buffered.size) this.attempts=0
-      }).catch(()=>{if(current()) fail('Unable to download candles. Retrying…')})
+      this.publish({status:hasExistingBars?'stale':'syncing'})
     }
     socket.onmessage=event=>{
       if (!current() || typeof event.data!=='string') return
@@ -88,6 +75,21 @@ export class LiveFeed {
       const next=parsed.bar.time===last.time?[...bars.slice(0,-1),parsed.bar]:[...bars,parsed.bar].slice(-1000)
       this.attempts=0;this.publish({bars:next,status:'live',lastUpdate:received,error:''})
     }
+    // REST history and the WebSocket handshake are independent. Start both at
+    // once so a slow handshake does not keep the chart empty.
+    this.abort=new AbortController()
+    void this.deps.load(this.abort.signal).then(bars=>{
+      if (!current()) return
+      // Replace the complete rolling window, including missed closed candles.
+      // Buffered stream events win over the REST snapshot during hydration.
+      const merged=new Map(bars.map(b=>[b.time,b]))
+      for (const {bar} of buffered.values()) if(bar.time>=bars[0].time) merged.set(bar.time,bar)
+      const result=[...merged.values()].sort((a,b)=>a.time-b.time).slice(-1000)
+      if (result.some((b,i)=>i>0 && b.time!==result[i-1].time+width)) {fail('Backfilling missing candles…');return}
+      hydrated=true
+      this.publish({bars:result,status:buffered.size?'live':'syncing',lastUpdate:buffered.size?received:null,error:''})
+      if(buffered.size) this.attempts=0
+    }).catch(()=>{if(current()) fail('Unable to download candles. Retrying…')})
     this.watchdog=setInterval(()=>{if(Date.now()-received>15000 || (!hydrated && Date.now()-started>15000)) fail('Data is stale. Reconnecting…')},1000)
   }
   stop() {this.running=false;++this.generation;clearTimeout(this.retry);clearInterval(this.watchdog);this.abort?.abort();this.socket?.close()}

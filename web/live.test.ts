@@ -9,10 +9,10 @@ class Socket {
   close=vi.fn()
   send(data:string) { this.onmessage?.({data}) }
 }
-function setup(history = [row(start-width), row(start)]) {
+function setup(history = [row(start-width), row(start)],loadImplementation?:(signal:AbortSignal)=>Promise<ReturnType<typeof parseHistory>>) {
   vi.useFakeTimers(); vi.setSystemTime(now)
   const sockets:Socket[]=[], states:LiveState[]=[]
-  const load=vi.fn(async (_signal:AbortSignal) => parseHistory(history,'1m'))
+  const load=vi.fn(loadImplementation??(async (_signal:AbortSignal) => parseHistory(history,'1m')))
   const feed=new LiveFeed('BTCUSDT','1m',s=>states.push(s),{socket:()=>{const s=new Socket();sockets.push(s);return s},load})
   feed.start()
   return {feed,sockets,states,load}
@@ -24,6 +24,18 @@ it('validates symbol, interval and OHLCV, and refuses malformed prices',()=>{
   expect(parseKline(message().replace('"1m"','"5m"'),'BTCUSDT','1m')).toBeNull()
   expect(parseKline(message(start,NaN),'BTCUSDT','1m')).toBeNull()
   expect(()=>parseHistory([row(start),row(start+width*2)],'1m')).toThrow()
+})
+it('hydrates Live history while the WebSocket is still connecting',async()=>{
+  const {feed,sockets,states,load}=setup()
+  expect(load).toHaveBeenCalledOnce()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(states.at(-1)?.bars).toHaveLength(2)
+  expect(states.at(-1)?.status).toBe('syncing')
+  sockets[0].onopen?.()
+  sockets[0].send(message(start,102))
+  expect(states.at(-1)?.status).toBe('live')
+  expect(states.at(-1)?.bars.at(-1)?.close).toBe(102)
+  feed.stop()
 })
 it('buffers stream during REST hydration and updates the current candle',async()=>{
   const {feed,sockets,states}=setup();sockets[0].onopen?.();sockets[0].send(message(start,102))
@@ -60,13 +72,12 @@ it('never lets a late hydration response revive a disposed feed',async()=>{
   expect(states).toHaveLength(count)
 })
 it('remains stale and retries when backfill fails',async()=>{
-  const {feed,sockets,states,load}=setup();load.mockRejectedValueOnce(new Error('offline'));sockets[0].onopen?.()
+  const {feed,sockets,states,load}=setup(undefined,()=>Promise.reject(new Error('offline')));sockets[0].onopen?.()
   await vi.advanceTimersByTimeAsync(0);expect(states.at(-1)?.status).toBe('stale')
   await vi.advanceTimersByTimeAsync(1000);expect(sockets).toHaveLength(2);feed.stop()
 })
 it('times out stalled hydration even when the socket keeps sending',async()=>{
-  const {feed,sockets,states,load}=setup()
-  load.mockImplementationOnce(()=>new Promise(()=>{}));sockets[0].onopen?.()
+  const {feed,sockets,states}=setup(undefined,()=>new Promise(()=>{}));sockets[0].onopen?.()
   for(let i=0;i<16;i++) { sockets[0].send(message().replace(String(now),String(Date.now())));await vi.advanceTimersByTimeAsync(1000) }
   expect(states.at(-1)?.status).toBe('stale');feed.stop()
 })

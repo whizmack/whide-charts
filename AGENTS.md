@@ -116,7 +116,7 @@ a `uv.lock`. OpenCharts je lokálně patchované 0.3.0 nad Lightweight Charts
 | `backend/importer.py` | Binance Vision USD-M archivy, měsíční/denní období, SHA-256 a úplnost importu. |
 | `backend/sessions.py` | Zachovaný legacy Vela snapshot API GET/PUT `/api/session`; hlavní UI jej nepoužívá. |
 | `web/replay.ts`, `web/api.ts` | Sdílené typy, Replay clock/request generations, API klient a loader historických barů. |
-| `web/live.ts` | Sdílený skutečný `LiveFeed`, validace, REST hydratace, stale/reconnect/backfill a cleanup. |
+| `web/live.ts` | Sdílený skutečný `LiveFeed`, validace, souběžná REST hydratace a WebSocket handshake, stale/reconnect/backfill a cleanup. |
 | `web/compare/Preview.tsx`, `workspace.ts`, `bootstrap.ts` | Hlavní OpenCharts UI na `/`, workspace, validace konfigurace a bootstrap přes `/api/markets`. |
 | `web/compare/ChartCell.tsx` | Data a kresby konkrétní cell, bezpečné zobrazování prefixu, scoped undo/redo. |
 | `web/compare/StudyWorkspace.tsx`, `StudySettings.tsx`, `studies.ts`, `studyData.ts` | Price overlays, samostatné oscillator panes, jejich nastavení, matematika a geometrie. |
@@ -199,6 +199,10 @@ pokud `dist/` při vytváření app neexistovalo, také restart backendu.
 6. Starý request nesmí přepsat novější selection ani po ignorovaném abortu.
    Zachovej generation guards. Při rewindu ihned skryj pozdější painted data,
    včetně cache nativního grafu; nesmí probliknout ani během loadingu.
+   Při posunu Replay vpřed zachovej do dokončení requestu předchozí bezpečný
+   prefix pro stejný symbol/timeframe. Loading overlay ukaž jen bez bezpečného
+   vykreslitelného frame; rewind a změna výběru dál skryjí data okamžitě podle
+   skutečného cutoffu.
 7. Kresba vytvořená později se při návratu před její vznik skryje. Uživatelovo
    ruční skrytí zůstane zachované. Session se obnovuje pozastavená.
 8. Doména/backend používají ms; OpenCharts/Lightweight Charts používají
@@ -229,6 +233,12 @@ pokud `dist/` při vytváření app neexistovalo, také restart backendu.
   appearance preferences mají vlastní vendor storage. Stav UI, kresby a
   viewporty se ukládají v localStorage daného originu. Live market bars jsou
   pouze v paměti.
+- `LiveFeed` spouští REST hydrataci současně s WebSocket handshake, aby pomalé
+  otevření socketu neblokovalo načtení prvního okna. `livePool` ponechá poslední
+  okno v paměti procesu i bez viditelných subscriberů; při nule subscriberů
+  zastaví socket a recovery timery, při návratu nejdřív emituje cache a znovu
+  spustí připojení. První Live načtení daného páru/timeframe po startu procesu
+  stále čeká na veřejný Binance feed. Cache se neukládá na disk.
 - localStorage patří originu/prohlížeči. Vite port, 8765, `localhost` a
   `127.0.0.1` nemusí sdílet nastavení. Při diagnostice persistence ověř origin.
   „Export backup“ OpenCharts je snapshot konfigurace/kreseb, ne kompletní záloha
@@ -351,3 +361,17 @@ Běžné `npm test` tyto dva testy přeskočí. Spouštěj je pro změnu exchang
 integrace nebo požadované end-to-end ověření Live, ne jako podmínku offline
 práce. Výpadek burzy hlásit odděleně od deterministické regrese. Nenahrávej
 testovací kresby/session do uživatelova stavu bez obnovy původního snapshotu.
+
+## 2026-10-27 — Replay a Live přechody
+
+- Forward Replay kroky zachovávají předchozí bezpečný frame během načítání;
+  loading overlay zůstává jen pro stav bez vykreslitelných dat. Rewind dál
+  ihned ořezává budoucí data.
+- Live REST historie se načítá současně s WebSocket handshake. Poslední Live
+  okno zůstává jen v paměti procesu i během odpojení cell; návrat do stejného
+  páru/timeframe ho ukáže hned a znovu připojí feed. Po restartu aplikace je
+  první načtení závislé na Binance.
+- Změna byla ověřena v nainstalované Electron aplikaci: Next/Play bez
+  přechodné loading hlášky, návrat do zahřátého Live okna s okamžitým renderem
+  a následným připojením. `npm test`: 61 passed / 2 skipped;
+  `uv run pytest -q`: 32 passed; typecheck a build prošly.

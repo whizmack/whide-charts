@@ -7,5 +7,5 @@ export function subscribeLive(symbol:Symbol,timeframe:Timeframe,listener:(s:Live
  const key=symbol+':'+timeframe;let entry=feeds.get(key)
  if(!entry){const listeners=new Set<(s:LiveState)=>void>();const value:Entry={listeners,feed:new LiveFeed(symbol,timeframe,s=>{value.state=s;for(const fn of listeners)fn(s)})};entry=value;feeds.set(key,entry)}
  entry.listeners.add(listener);if(entry.state)listener(entry.state);entry.feed.start()
- return()=>{entry.listeners.delete(listener);if(!entry.listeners.size){entry.feed.stop();feeds.delete(key)}}
+ return()=>{entry.listeners.delete(listener);if(!entry.listeners.size)entry.feed.stop()}
 }

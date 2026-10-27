@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState} from 'react'
 import type {DrawingLine,DrawingTool,IndicatorType} from '@dylanpersonguy/opencharts'
 import {StudyWorkspace} from './StudyWorkspace'
 import {ChartBus} from './chartBus'
-import {visibleDrawings} from './data'
+import {cellMessage,visibleDrawings} from './data'
 import {loadBars,type Bar} from '../api'
 import {LatestRequest} from '../replay'
 import {subscribeLive} from './livePool'
@@ -33,9 +33,10 @@ export function ChartCell({config,mode,asOf,version,active,drawingRailHost,bus,r
  function undo(redo=false){const h=history.current.get(drawingKey);if(!h)return;const from=redo?h.future:h.past,to=redo?h.past:h.future,previous=from.pop();if(!previous)return;to.push(drawingRef.current[drawingKey]??[]);drawingRef.current={...drawingRef.current,[drawingKey]:previous};lastEdit.current=0;onDrawings(drawingKey,previous)}
  const bars=paintable?frame!.bars:[],candles=useMemo(()=>bars.map(b=>({...b,time:b.time/1000})),[bars])
  const shown=visibleDrawings(drawings[drawingKey]??[],mode,asOf).map(d=>d.drawing)
+ const message=cellMessage(mode,!!safe,!!paintable,error)
  return <div className="cell-content" data-mode={mode} data-symbol={symbol} data-timeframe={timeframe} data-as-of={mode==='replay'?asOf:undefined}>
   {paintable&&bars.length?<StudyWorkspace key={`${mode}:${symbol}:${timeframe}:${reset}`} cell={`${id}:${mode}`} bars={bars} bus={bus} active={config.indicators} settings={config.studies} onSettings={onStudy} onEdit={onEdit} onRemove={onRemove} drawingRailHost={activeDrawingRailHost(active,drawingRailHost)} panel={{candles,selectedSymbol:symbol,timeframe,isDark:true,activeIndicators:[],drawings:shown,drawingTool:active?tool:'none',onAddDrawing:d=>commit([...(drawingRef.current[drawingKey]??[]),{asOf,drawing:d}]),onUpdateDrawing:d=>commit((drawingRef.current[drawingKey]??[]).map(item=>item.drawing.id===d.id?{...item,drawing:d}:item),true),onRemoveDrawing:did=>commit((drawingRef.current[drawingKey]??[]).filter(item=>item.drawing.id!==did)),onClearDrawings:()=>commit([]),onDrawingToolSelect:setTool,onDrawingComplete:()=>{if(!stay)setTool('none')},onUndoDrawing:()=>undo(),onRedoDrawing:()=>undo(true),magnetMode:effectiveMagnet(magnet,active&&held),stayInDrawingMode:stay,onMagnetToggle:onMagnet,onStayInDrawingModeToggle:onStay,keyboardEnabled:active,showDrawingTools:active,positions:[],orders:[],pipDigits:symbol==='SOLUSDT'?3:2,isReplaying:mode==='replay',showNews:false,showLastPrice:true}}/>:null}
-  {!safe||(mode==='replay'&&error)?<div className="compare-message" role="status">{error||(mode==='live'?'Connecting to Binance Live…':'Loading safe replay candles…')}</div>:null}
+  {message?<div className="compare-message" role="status">{message}</div>:null}
   {mode==='live'?<div className={`cell-health ${health}`}>{health==='live'?'● Live':health==='stale'?'● Stale · reconnecting':'● Syncing'}{error?<span title={error}> · {error}</span>:null}</div>:null}
  </div>
 }
