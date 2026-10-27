@@ -1,0 +1,8 @@
+{
+  "name": "whide-charts-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Whide Charts desktop shell",
+  "author": "Whiz",
+  "main": "main.cjs"
+}

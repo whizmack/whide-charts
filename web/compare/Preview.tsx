@@ -12,6 +12,7 @@ import {applyModifierKey,defaultStudy,normalizeStudy,type Magnet,type StudySetti
 import {StudySettingsDialog} from './StudySettings'
 import {ActiveChartMaximizeButton,CellCaption,createWorkspaceBackup,IndicatorToolbarButton,LiveTransport,PairSelector,ReplayTransport,shouldShowCellCaption,WorkspaceDrawingRailHost,WorkspaceStatusBar,WorkspaceUtilityRail} from './WorkspaceChrome'
 const prefix='opencharts-preview:'
+const desktopShell=typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('desktop')==='1'
 function read<T>(key:string,fallback:T):T{try{return JSON.parse(localStorage.getItem(prefix+key)??'null')??fallback}catch{return fallback}}
 const layouts:{id:Layout;label:string;icon:string}[]=[{id:'one',label:'Single chart',icon:'□'},{id:'columns',label:'Two side by side',icon:'▥'},{id:'rows',label:'Two stacked',icon:'▤'},{id:'three',label:'One large + two',icon:'◧'},{id:'four',label:'Four charts',icon:'⊞'}]
 export default function Preview(){
@@ -46,14 +47,14 @@ export default function Preview(){
  const split=useRef<{axis:'column'|'row';start:number;size:number;value:number}|null>(null),gridRef=useRef<HTMLDivElement>(null)
  function divider(axis:'column'|'row'){return <div key={axis} className={`workspace-divider ${axis}`} role="separator" aria-label={`Resize chart ${axis}s`} aria-orientation={axis==='column'?'vertical':'horizontal'} aria-valuemin={25} aria-valuemax={75} aria-valuenow={w[axis]} tabIndex={0} onPointerDown={e=>{const r=gridRef.current!.getBoundingClientRect();split.current={axis,start:axis==='column'?e.clientX:e.clientY,size:axis==='column'?r.width:r.height,value:w[axis]};e.currentTarget.setPointerCapture(e.pointerId)}} onPointerMove={e=>{const d=split.current;if(d){const pos=d.axis==='column'?e.clientX:e.clientY;setW(v=>({...v,[d.axis]:Math.max(25,Math.min(75,d.value+100*(pos-d.start)/d.size))}))}}} onPointerUp={()=>{split.current=null}} onLostPointerCapture={()=>{split.current=null}} onKeyDown={e=>{const negative=axis==='column'?'ArrowLeft':'ArrowUp',positive=axis==='column'?'ArrowRight':'ArrowDown';if(e.key===negative||e.key===positive){e.preventDefault();setW(v=>({...v,[axis]:Math.min(75,Math.max(25,v[axis]+(e.key===positive?2:-2)))}))}}}/>}
  const edited=studyEdit?current.cells.find(c=>c.id===studyEdit.cell):null
- return <OpenChartsProvider adapter={adapter}><div className="compare-app">
+ return <OpenChartsProvider adapter={adapter}><div className={`compare-app${desktopShell?' desktop-shell':''}`}>
   <header className="compare-toolbar">
-   <span className="back-link" aria-label="Perp Replay workspace">Perp Replay</span>
+   {desktopShell?null:<span className="back-link" aria-label="Whide Charts workspace">Whide Charts</span>}
    <PairSelector value={active.symbol} onChange={symbol=>patchCell(activeId,{symbol})}/>
    <div className="compare-timeframes" role="group" aria-label="Timeframe">{TIMEFRAMES.map(tf=><button key={tf} aria-pressed={active.timeframe===tf} onClick={()=>patchCell(activeId,{timeframe:tf})}>{tf}</button>)}</div>
    <IndicatorToolbarButton expanded={indicatorsOpen} onToggle={()=>{setIndicatorsOpen(v=>!v);setLayoutOpen(false)}}/>
    <div className="compare-modes" role="group" aria-label="Chart mode">{(['live','replay'] as const).map(m=><button key={m} aria-pressed={mode===m} onClick={()=>changeMode(m)}>{m==='live'?'Live':'Replay'}</button>)}</div>
-   <div className="toolbar-spacer"/>
+   <div className={`toolbar-spacer${desktopShell?' window-drag-region':''}`}/>
    <ActiveChartMaximizeButton maximized={Boolean(maximized)} onToggle={()=>setMaximized(maximized?null:activeId)}/>
   </header>
   {layoutOpen?<div className="workspace-popover layout-popover"><h2>Chart layout</h2><div className="layout-options">{layouts.map(l=><button key={l.id} aria-pressed={w.layout===l.id} onClick={()=>setLayout(l.id)}><span>{l.icon}</span>{l.label}</button>)}</div><label><input type="checkbox" checked={w.syncTime} onChange={e=>setW(v=>({...v,syncTime:e.target.checked}))}/>Sync time & scrolling</label><label><input type="checkbox" checked={w.syncCrosshair} onChange={e=>setW(v=>({...v,syncCrosshair:e.target.checked}))}/>Sync crosshair</label><p>Pair and timeframe stay independent.</p><button onClick={()=>setLayoutOpen(false)}>Close</button></div>:null}

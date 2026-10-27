@@ -1,4 +1,4 @@
-# Perp Replay
+# Whide Charts
 
 Lokální charting a historický replay Binance USD-M perpetual futures pro
 BTCUSDT, ETHUSDT a SOLUSDT. OpenCharts je hlavní aplikace. Journal, ruční
@@ -17,6 +17,30 @@ Otevřete [lokální aplikaci](http://127.0.0.1:8765). Ukončení serveru: Ctrl+
 Historický replay funguje offline po stažení historie. Live používá veřejný
 Binance feed a potřebuje internet. Aplikace nevyžaduje účet ani API klíče a
 neodesílá objednávky.
+
+### Desktop app
+
+Na Apple Silicon Macu lze vytvořit běžnou `Whide Charts.app`, kterou otevřete
+z Finderu nebo připnete do Docku:
+
+```sh
+uv sync --frozen
+npm ci --no-audit --no-fund
+npm run desktop:build
+```
+
+Build vytvoří arm64 Electron appku v `~/Applications/Whide Charts.app`. Otevřete
+ji z Applications a v Docku zvolte **Options → Keep in Dock**. Ukončení přes
+**Whide Charts → Quit Whide Charts** nebo `⌘Q` zavře backend spuštěný appkou.
+Electron používá současný OpenCharts root `/` a stejné FastAPI API; běžný
+prohlížeč a `scripts/start.sh` zůstávají dostupné.
+
+Při prvním buildu appka použije existující projektové `.data/` jako svou datovou
+cestu, pokud je přítomná. Nic se nekopíruje ani nepřesouvá. Jestli projektová
+složka později nebude dostupná, backend použije
+`~/Library/Application Support/PerpReplay`. Desktopová localStorage je oddělená
+od prohlížeče a Vite originu. Lokální app je ad-hoc podepsaná pro tento Mac;
+instalační balíček a notarizace pro distribuci na jiné Macy zatím nejsou součástí.
 
 Data této vývojové verze jsou v `.data/` vedle kódu, mimo Git. Umístění lze
 změnit přes `PERP_REPLAY_DATA_DIR=/absolutni/cesta ./scripts/start.sh`.

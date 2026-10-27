@@ -46,6 +46,10 @@ def create_app(store: Store) -> FastAPI:
     def markets():
         return {"markets": store.markets(), "datasetVersion": store.version(), "timeframes": list(TIMEFRAMES)}
 
+    @app.get("/api/health")
+    def health():
+        return {"app": "perp-replay", "status": "ok"}
+
     @app.get("/api/bars")
     def bars(symbol: Symbol, timeframe: Timeframe, asOf: int = Query(ge=1672531200000, le=4102444800000), limit: int = Query(500, ge=1, le=2000), version: str | None = None):
         try:
@@ -120,9 +124,9 @@ def create_app(store: Store) -> FastAPI:
             raise HTTPException(404, "Import status is unavailable. Check data coverage after restarting.")
         return jobs[job_id]
 
-    dist = Path(__file__).resolve().parents[1] / "dist"
-    if dist.exists():
-        app.mount("/", StaticFiles(directory=dist, html=True), name="web")
+    web_dir = Path(os.environ.get("PERP_REPLAY_WEB_DIR", Path(__file__).resolve().parents[1] / "dist"))
+    if web_dir.exists():
+        app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
     return app
 
 

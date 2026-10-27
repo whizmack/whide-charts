@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .data/
 .superpowers/
+.desktop-build/
 *.pyc
 *.log
 .DS_Store

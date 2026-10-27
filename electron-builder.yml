@@ -1,0 +1,23 @@
+appId: com.whiz.whidecharts
+productName: Whide Charts
+electronVersion: 41.5.0
+directories:
+  app: desktop
+  output: .desktop-build/out
+files:
+  - main.cjs
+extraResources:
+  - from: .desktop-build/backend
+    to: backend
+  - from: .desktop-build/desktop-data-path.txt
+    to: desktop-data-path.txt
+  - from: dist
+    to: web
+mac:
+  category: public.app-category.finance
+  target:
+    - dir
+  identity: "-"
+  hardenedRuntime: true
+  entitlements: desktop/entitlements.mac.plist
+  entitlementsInherit: desktop/entitlements.mac.plist
