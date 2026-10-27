@@ -1,5 +1,24 @@
 # Replay — průběh
 
+## 2026-10-26 — Handoff po TradingView-like drawing/UI etapě
+
+- Souvislý workspace shell, fixní 40px drawing rail, rozšířený drawing pack,
+  contextual settings a poslední alignment pass jsou dokončené v commitu
+  `956b02b` (`feat: add TradingView-style drawing workspace`) a pushnuté na
+  `origin/main`. Worktree byl při předání čistý.
+- Aktuální ověření: host 56 passed / 2 skipped, backend 32 passed, vendor
+  303 passed / 1 skipped; host i vendor typecheck a production build prošly.
+  Detail posledního vizuálního passu je v
+  `docs/2026-10-26-interface-alignment-verification.md`.
+- Uživatel určil jako další hlavní etapu Electron desktop shell podle
+  `docs/superpowers/plans/2026-10-20-desktop-electron.md`. Implementace ještě
+  nezačala; starší rozhodovací plán je nutné nejdřív aktualizovat podle
+  současného OpenCharts UI na `/`.
+- Favorites zůstává následující UI feature, ale má se implementovat až po
+  minimálním zprovoznění Electron shellu a následně ověřovat uvnitř desktopové
+  aplikace. Jde o samostatnou pohyblivou horizontální lištu s persistovaným
+  výběrem nástrojů a pozicí; fixní levý rail se nemění.
+
 ## 2026-10-24 — Fixní globální drawing rail
 
 - Primární OpenCharts drawing toolbar je jeden vždy přítomný 40px sloupec vlevo
@@ -40,7 +59,8 @@
 Ruling: samostatná macOS aplikace je chtěná pod dočasným názvem Whide Charts.
 TradingView Desktop na tomto Macu je Electron 38 (ověřeno v `/Applications/TradingView.app`).
 Shell bude Electron + stávající React UI + Python sidecar přes HTTP `/api`.
-Tauri odloženo. Nepřepisovat do Swiftu/Rustu. Implementace až na zadání.
+Tauri odloženo. Nepřepisovat do Swiftu/Rustu. Implementace byla tehdy odložena;
+uživatel její start následně určil jako další etapu v handoffu 2026-10-26 výše.
 Plán: `docs/superpowers/plans/2026-10-20-desktop-electron.md`.
 
 

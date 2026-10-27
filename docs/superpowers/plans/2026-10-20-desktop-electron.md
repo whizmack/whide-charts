@@ -1,7 +1,23 @@
 # Desktop shell: Electron (Whide Charts)
 
-Status: rozhodnutí 20. 10. 2026. **Neimplementovat**, dokud uživatel nezadá start.
+Status: směr schválen 20. 10. 2026; dne 26. 10. 2026 uživatel určil Electron
+desktop shell jako **další hlavní etapu**. Implementace zatím nezačala.
 Název produktu je zatím dočasný: **Whide Charts**.
+
+## Handoff 2026-10-26
+
+TradingView-like webový workspace včetně fixního drawing railu, rozšířených
+drawing tools, contextual settings a alignment passu je dokončený, commitnutý
+a pushnutý na `main` jako `956b02b`. Aktuální hlavní UI je OpenCharts na
+`/`; starší zmínky o `/compare.html`, Vela nebo volbě grafového enginu už
+nejsou implementační zadání.
+
+Před zahájením kódu z tohoto rozhodovacího dokumentu vytvoř nebo aktualizuj
+konkrétní implementační plán proti současnému stromu. První milestone má být
+minimální vývojový Electron shell nad existujícím UI a stávajícím FastAPI
+kontraktem, ne redesign ani přepis backendu. Po jeho zprovoznění se má další
+UI práce — zejména samostatná pohyblivá Favorites drawing lišta — dělat a
+ověřovat uvnitř desktopové aplikace. Fixní levý 40px rail zůstává beze změny.
 
 Související: `docs/2026-10-14-architecture-proposal.md` (původně odložilo wrapper
 až po funkčním replayi), `docs/2026-10-15-tradingview-open-source-research.md`
@@ -89,16 +105,16 @@ TradingView připomíná víc než nativní WKWebView s chudým grafem.
 Větší `.app` (TV dmg je ~200 MB) a dva runtime (Chromium + Python). Výměna:
 stejný render jako TV, JS main process, známý sidecar vzor.
 
-## Až k implementaci
+## Implementační start
 
-Až uživatel zadá start, oddělený implementační plán má pokrýt:
+Navazující konkrétní implementační plán má pokrýt:
 
 1. Minimální Electron okno nad `dist/` nebo Vite dev, bez změny API.
 2. Sidecar: start uvicorn, health, graceful quit, datová cesta.
 3. macOS `.app` (arm64 nejdřív), ikona, menu, loopback only.
 4. Balení Python (uv/venv nebo standalone) a codesign.
-5. Ověření: replay, Live, kreslení, OpenCharts `/compare.html`, quit zabije
+5. Ověření: replay, Live, kreslení, hlavní OpenCharts UI na `/`, quit zabije
    backend, data zůstanou v Application Support.
 
-Do té doby desktopový wrapper není provozní podmínka. Současný stack
-React + FastAPI + `start.sh` platí.
+Do dokončení prvního desktop milestone zůstává React + FastAPI + `start.sh`
+plně podporovanou vývojovou cestou; Electron nesmí rozbít browser workflow.

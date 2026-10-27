@@ -2,7 +2,7 @@
 
 Instrukce pro všechny agenty pracující v tomto repozitáři. Platí pro celý strom;
 případný vnořený `AGENTS.md` upřesňuje pravidla své složky. Mapa kódu byla
-ověřena 2026-10-22. Při změně architektury aktualizuj i tento dokument.
+ověřena 2026-10-26. Při změně architektury aktualizuj i tento dokument.
 
 ## 1. Co stavíme a co chce uživatel
 
@@ -13,9 +13,11 @@ nepotřebuje účet ani API klíče a zatím nemá engine vyhodnocující obchod
 
 - Preferuj bezplatná a open-source řešení. Zachovej lokální provoz a offline
   replay po stažení historie. Cloud ani Docker nejsou provozní podmínkou.
-  Desktopový wrapper zatím také ne; plánovaný shell je Electron, viz
-  `docs/superpowers/plans/2026-10-20-desktop-electron.md`. Neimplementuj ho
-  bez výslovného zadání.
+  Uživatel 2026-10-26 určil jako další hlavní etapu macOS desktopovou aplikaci.
+  Plánovaný shell je Electron + současné React UI + Python sidecar, viz
+  `docs/superpowers/plans/2026-10-20-desktop-electron.md`. Implementace ještě
+  nezačala; před kódem aktualizuj tento starší plán podle současného OpenCharts
+  rootu `/`, packagingu a datových invariantů.
 - Graf OpenCharts na `/` je hlavní aplikace a pracovní plocha. Uživatel chce
   vizuální kompozici co nejbližší dodaným TradingView desktop screenshotům:
   horní lištu, kreslicí nástroje vlevo, utility vpravo, spodní lištu, tmavý graf,
@@ -35,6 +37,16 @@ nepotřebuje účet ani API klíče a zatím nemá engine vyhodnocující obchod
   celého workspace gridu. Nemění polohu s aktivní cell, layoutem ani maximize;
   vždy ovládá pouze aktivní chart. Není draggable ani skrývatelný. Případná
   budoucí pohyblivá lišta smí být jen samostatná Favorites lišta.
+- TradingView-like shell, fixní rail, rozšířený drawing pack, contextual
+  settings a alignment pass jsou dokončené, commitnuté a pushnuté na
+  `main` jako `956b02b` (`feat: add TradingView-style drawing workspace`).
+  Poslední ověření je v `docs/2026-10-26-interface-alignment-verification.md`.
+  Worktree byl při předání čistý. Nevracej tuto práci podle starších plánů,
+  které ještě uvádějí „no commit“ nebo Favorites jako okamžitý další krok.
+- Po zprovoznění minimálního Electron shellu pokračuje UI etapa samostatnou
+  TradingView-like Favorites drawing lištou uvnitř desktopové aplikace:
+  pohyblivá horizontální lišta, výběr oblíbených nástrojů a persistence výběru
+  i pozice. Pevný levý drawing rail se kvůli Favorites nesmí změnit ani pohnout.
 - **OpenCharts je hlavní rozhraní na `/`.** Uživatel výslovně zvolil cutover
   2026-10-22. Neimportuj Vela ani OpenAlgo nastavení/kresby; uživatel potvrdil,
   že nemá žádné, které chce zachovat. Historii trhu, její cestu, SQLite katalog,
@@ -81,7 +93,7 @@ Neuváděj návrh jako hotovou funkci ani nevracej novější práci podle star�
 | `docs/*verification.md` | Pozorované výsledky, testovací scénáře a omezení konkrétní etapy. Čti nejnovější relevantní report. |
 | `docs/reference/tradingview/README.md` | Uživatelem dodané TradingView desktop reference z 2026-10-22; index jednotlivých screenshotů a oblastí UI, kterým odpovídají. |
 | `docs/superpowers/plans/` | Implementační plány replaye, Live, OpenCharts, multi-chart/indicator workspace a Electron desktop shellu. Nejsou automatickým zadáním další práce. |
-| `docs/superpowers/plans/2026-10-20-desktop-electron.md` | Rozhodnutí: macOS `.app` jako Electron + Python sidecar, TV-like cíl, Tauri odloženo. Zatím jen záznam, ne implementace. |
+| `docs/superpowers/plans/2026-10-20-desktop-electron.md` | Schválený další směr: macOS `.app` jako Electron + Python sidecar, TV-like cíl, Tauri odloženo. Implementace nezačala a plán je třeba před kódem aktualizovat podle současného OpenCharts rootu `/`. |
 | `docs/progress.md`, `docs/*.jpg` | Historie rozhodnutí a obrazové důkazy. Neúplný průběžný záznam, nikoli aktuální test runner. |
 
 Původní návrh říká „žádný live stream“, „jeden graf“ a SQLite jako hlavní
