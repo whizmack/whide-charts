@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,type FormEvent,type KeyboardEvent as ReactKeyboardEvent,type ReactElement,type ReactNode,type Ref} from 'react'
+import {useEffect,useRef,useState,type CSSProperties,type FormEvent,type KeyboardEvent as ReactKeyboardEvent,type ReactElement,type ReactNode,type Ref} from 'react'
 import {createPortal} from 'react-dom'
 import {
  BarChartIcon,
@@ -13,6 +13,7 @@ import {
  EnterFullScreenIcon,
  ExitFullScreenIcon,
  GearIcon,
+ InfoCircledIcon,
  MagnifyingGlassIcon,
  PauseIcon,
  PlayIcon,
@@ -229,16 +230,126 @@ export type WorkspaceUtilityRailProps={
  onToggleWatchlist:()=>void
  onToggleLayout:()=>void
  onOpenSettings:()=>void
+ onOpenAbout:()=>void
  onExport:()=>void
 }
 
-export function WorkspaceUtilityRail({watchlistOpen,layoutOpen,layoutButtonRef,onToggleWatchlist,onToggleLayout,onOpenSettings,onExport}:WorkspaceUtilityRailProps):ReactElement{
- return <nav className="workspace-utility-rail" aria-label="Workspace utilities">
+export function menuFocusIndex(key:string,index:number,itemCount:number):number|null{
+ if(itemCount<=0)return null
+ if(key==='Home')return 0
+ if(key==='End')return itemCount-1
+ if(key==='ArrowDown')return(index+1+itemCount)%itemCount
+ if(key==='ArrowUp')return(index-1+itemCount)%itemCount
+ return null
+}
+
+export type WorkspaceSettingsMenuProps={
+ open:boolean
+ onOpenChartSettings:()=>void
+ onOpenAbout:()=>void
+ onClose?:()=>void
+}
+
+export function WorkspaceSettingsMenu({open,onOpenChartSettings,onOpenAbout,onClose=()=>{}}:WorkspaceSettingsMenuProps):ReactElement|null{
+ if(!open)return null
+ function handleKeyDown(event:ReactKeyboardEvent<HTMLDivElement>){
+  if(event.key==='Escape'){event.preventDefault();onClose();return}
+  const items=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+  const index=items.indexOf(document.activeElement as HTMLButtonElement)
+  const next=menuFocusIndex(event.key,index,items.length)
+  if(next!==null){event.preventDefault();items[next]?.focus()}
+ }
+ return <div className="workspace-settings-menu" role="menu" aria-label="Settings" onKeyDown={handleKeyDown}>
+  <button type="button" role="menuitem" onClick={onOpenChartSettings}><GearIcon aria-hidden="true"/>Chart settings</button>
+  <button type="button" role="menuitem" onClick={onOpenAbout}><InfoCircledIcon aria-hidden="true"/>About &amp; licenses</button>
+ </div>
+}
+
+export function WorkspaceUtilityRail({watchlistOpen,layoutOpen,layoutButtonRef,onToggleWatchlist,onToggleLayout,onOpenSettings,onOpenAbout,onExport}:WorkspaceUtilityRailProps):ReactElement{
+ const [settingsOpen,setSettingsOpen]=useState(false)
+ const rail=useRef<HTMLElement>(null)
+ const settingsButton=useRef<HTMLButtonElement>(null)
+ useEffect(()=>{
+  if(!settingsOpen)return
+  const firstFrame=requestAnimationFrame(()=>rail.current?.querySelector<HTMLButtonElement>('.workspace-settings-menu [role="menuitem"]')?.focus())
+  const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!rail.current?.contains(event.target))setSettingsOpen(false)}
+  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();setSettingsOpen(false);settingsButton.current?.focus()}}
+  document.addEventListener('pointerdown',outside)
+  window.addEventListener('keydown',escape)
+  return()=>{cancelAnimationFrame(firstFrame);document.removeEventListener('pointerdown',outside);window.removeEventListener('keydown',escape)}
+ },[settingsOpen])
+ function openChartSettings(){setSettingsOpen(false);settingsButton.current?.focus();onOpenSettings()}
+ function openAbout(){setSettingsOpen(false);settingsButton.current?.focus();onOpenAbout()}
+ return <nav ref={rail} className="workspace-utility-rail" aria-label="Workspace utilities">
   <button className="alignment-icon-control" aria-label="Watchlist" title="Watchlist" aria-pressed={watchlistOpen} onClick={onToggleWatchlist}><RowsIcon/></button>
   <button ref={layoutButtonRef} className="alignment-icon-control" aria-label="Chart layout" title="Chart layout" aria-expanded={layoutOpen} onClick={onToggleLayout}><DashboardIcon/></button>
-  <button className="alignment-icon-control" aria-label="Chart settings" title="Chart settings · workspace appearance" onClick={onOpenSettings}><GearIcon/></button>
+  <button ref={settingsButton} className="alignment-icon-control" aria-label="Settings" title="Settings" aria-haspopup="menu" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(value=>!value)}><GearIcon/></button>
   <button className="alignment-icon-control" aria-label="Export workspace backup" title="Export workspace backup" onClick={onExport}><DownloadIcon/></button>
+  <WorkspaceSettingsMenu open={settingsOpen} onOpenChartSettings={openChartSettings} onOpenAbout={openAbout} onClose={()=>{setSettingsOpen(false);settingsButton.current?.focus()}}/>
  </nav>
+}
+
+export type WorkspaceMagnetMenuProps={open:boolean;magnet:Magnet;onChange:(magnet:Magnet)=>void;onClose:()=>void}
+
+const magnetChoices:{value:Magnet;label:string}[]=[{value:'none',label:'Off'},{value:'weak',label:'Weak'},{value:'strong',label:'Strong'}]
+
+export function WorkspaceMagnetMenu({open,magnet,onChange,onClose}:WorkspaceMagnetMenuProps):ReactElement|null{
+ const menu=useRef<HTMLDivElement>(null)
+ const [position,setPosition]=useState<CSSProperties>({left:42,top:44})
+ useEffect(()=>{
+  if(!open)return
+  const trigger=()=>document.querySelector<HTMLButtonElement>('.drawing-rail-host button[title^="Magnet"]')
+  const updatePosition=()=>{
+   const bounds=trigger()?.getBoundingClientRect()
+   if(!bounds)return
+   const width=172,height=112
+   setPosition({left:Math.max(6,Math.min(bounds.right+4,window.innerWidth-width-6)),top:Math.max(6,Math.min(bounds.top,window.innerHeight-height-6))})
+  }
+  updatePosition()
+  const frame=requestAnimationFrame(()=>menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus())
+  const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!menu.current?.contains(event.target)&&!trigger()?.contains(event.target))onClose()}
+  document.addEventListener('pointerdown',outside)
+  window.addEventListener('resize',updatePosition)
+  window.addEventListener('scroll',updatePosition,true)
+  return()=>{cancelAnimationFrame(frame);document.removeEventListener('pointerdown',outside);window.removeEventListener('resize',updatePosition);window.removeEventListener('scroll',updatePosition,true)}
+ },[open,onClose])
+ if(!open)return null
+ function focusTrigger(){document.querySelector<HTMLButtonElement>('.drawing-rail-host button[title^="Magnet"]')?.focus()}
+ function handleKeyDown(event:ReactKeyboardEvent<HTMLDivElement>){
+  if(event.key==='Escape'){event.preventDefault();focusTrigger();onClose();return}
+  const items=Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'))
+  const index=items.indexOf(document.activeElement as HTMLButtonElement)
+  const next=menuFocusIndex(event.key,index,items.length)
+  if(next!==null){event.preventDefault();items[next]?.focus()}
+ }
+ const content=<div ref={menu} className="workspace-magnet-menu" role="menu" aria-label="Magnet mode" style={position} onKeyDown={handleKeyDown}>
+  {magnetChoices.map(choice=><button key={choice.value} type="button" role="menuitemradio" aria-checked={magnet===choice.value} tabIndex={magnet===choice.value?0:-1} onClick={()=>{onChange(choice.value);focusTrigger();onClose()}}>{choice.label}{magnet===choice.value?<CheckIcon aria-hidden="true"/>:null}</button>)}
+ </div>
+ return typeof document==='undefined'?content:createPortal(content,document.body)
+}
+
+export function WorkspaceAboutDialog({open,onClose}:{open:boolean;onClose:()=>void}):ReactElement|null{
+ const dialog=useRef<HTMLDialogElement>(null)
+ useEffect(()=>{
+  const element=dialog.current
+  if(!element)return
+  if(open&&!element.open)element.showModal()
+  else if(!open&&element.open)element.close()
+  return()=>{if(element.open)element.close()}
+ },[open])
+ if(!open)return null
+ return <dialog ref={dialog} className="workspace-about-dialog" aria-labelledby="workspace-about-title" onCancel={event=>{event.preventDefault();onClose()}} onClick={event=>{
+  if(event.target!==event.currentTarget)return
+  const bounds=event.currentTarget.getBoundingClientRect()
+  if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)onClose()
+ }}>
+  <header><h2 id="workspace-about-title">About &amp; licenses</h2><button type="button" aria-label="Close About &amp; licenses" onClick={onClose}><Cross2Icon aria-hidden="true"/></button></header>
+  <section>
+   <p><a href="https://github.com/dylanpersonguy/OpenCharts" target="_blank" rel="noreferrer">OpenCharts · MIT</a><span>Chart workspace library</span></p>
+   <p><a href="https://github.com/tradingview/lightweight-charts/blob/master/LICENSE" target="_blank" rel="noreferrer">Lightweight Charts · Apache 2.0</a><span>Chart rendering engine</span></p>
+  </section>
+  <footer><button type="button" onClick={onClose}>Done</button></footer>
+ </dialog>
 }
 
 export type ReplayTransportProps={
@@ -393,27 +504,4 @@ export function LiveTransport({health,updated}:LiveTransportProps):ReactElement{
   <span>{label}</span>
   <span>{updated?`Updated ${new Date(updated).toISOString().slice(11,19)} UTC`:''}</span>
  </div>
-}
-
-export type WorkspaceStatusBarProps={
- mode:'replay'|'live'
- chartCount:number
- held:boolean
- magnet:Magnet
- stay:boolean
- storageError:string
- utcContext:string
- onMagnetChange:(magnet:Magnet)=>void
-}
-
-export function WorkspaceStatusBar({mode,chartCount,held,magnet,stay,storageError,utcContext,onMagnetChange}:WorkspaceStatusBarProps):ReactElement{
- const magnetLabel=held?'Magnet · Cmd/Ctrl held':magnet==='none'?'Hold Cmd/Ctrl to snap':`Magnet · ${magnet}`
- return <footer className="workspace-statusbar compare-footer">
-  <span>{mode==='live'?'Live':'Replay'} · {chartCount} chart{chartCount>1?'s':''}</span>
-  <span>{magnetLabel}{stay?' · Stay in drawing mode':''}</span>
-  <select className="alignment-numeric-control" aria-label="Persistent magnet" value={magnet} onChange={event=>onMagnetChange(event.target.value as Magnet)}><option value="none">Magnet off</option><option value="weak">Weak magnet</option><option value="strong">Strong magnet</option></select>
-  <span role="status">{storageError}</span>
-  {utcContext?<time>{utcContext}</time>:null}
-  <a href="https://github.com/dylanpersonguy/OpenCharts" target="_blank" rel="noreferrer">OpenCharts · MIT</a>
- </footer>
 }

@@ -12,10 +12,13 @@ import {
  shouldShowCellCaption,
  WorkspaceRangeToolbar,
  WorkspaceDrawingRailHost,
- WorkspaceStatusBar,
+ WorkspaceAboutDialog,
+ WorkspaceMagnetMenu,
+ WorkspaceSettingsMenu,
  WorkspaceUtilityRail,
  activeDrawingRailHost,
  filterSupportedPairs,
+ menuFocusIndex,
 } from './WorkspaceChrome'
 import {initialWorkspace,QUICK_RANGES} from './workspace'
 import {ChartBus} from './chartBus'
@@ -98,6 +101,7 @@ describe('workspace utility rail',()=>{
    onToggleWatchlist:noop,
    onToggleLayout:noop,
    onOpenSettings:noop,
+   onOpenAbout:noop,
    onExport:noop,
   }))
   expect(markup).toContain('aria-label="Watchlist"')
@@ -107,14 +111,14 @@ describe('workspace utility rail',()=>{
   expect(markup).toContain('aria-label="Chart layout"')
   expect(markup).toContain('title="Chart layout"')
   expect(markup).toContain('aria-expanded="true"')
-  expect(markup).toContain('aria-label="Chart settings"')
-  expect(markup).toContain('title="Chart settings · workspace appearance"')
+  expect(markup).toContain('aria-label="Settings"')
+  expect(markup).toContain('title="Settings"')
   expect(markup).toContain('aria-label="Export workspace backup"')
   expect(markup).toContain('title="Export workspace backup"')
  })
 })
 
-describe('workspace transport and status',()=>{
+describe('workspace transport and menus',()=>{
  it('renders TradingView date ranges and a date/custom-range Go to dialog',()=>{
   const markup=renderToStaticMarkup(createElement(WorkspaceRangeToolbar,{
    cell:'chart-1',timeframe:'1h',mode:'live',asOf:0,bus:new ChartBus(),
@@ -168,30 +172,43 @@ describe('workspace transport and status',()=>{
   expect(markup).toContain(label)
  })
 
- it('renders compact workspace state, storage status, UTC context, and attribution',()=>{
-  const markup=renderToStaticMarkup(createElement(WorkspaceStatusBar,{
-   mode:'replay',
-   chartCount:2,
-   held:false,
-   magnet:'weak',
-   stay:true,
-   storageError:'Unable to save workspace locally.',
-   utcContext:'2023-01-08 00:00 UTC',
-   onMagnetChange:noop,
+ it('offers Off, Weak, and Strong and marks the persistent magnet selection',()=>{
+  const markup=renderToStaticMarkup(createElement(WorkspaceMagnetMenu,{
+   open:true,magnet:'weak',onChange:noop,onClose:noop,
   }))
-  expect(markup).toContain('Replay · 2 charts')
-  expect(markup).toContain('class="alignment-numeric-control" aria-label="Persistent magnet"')
-  expect(markup).toContain('Magnet · weak · Stay in drawing mode')
-  expect(markup).toContain('Unable to save workspace locally.')
-  expect(markup).toContain('2023-01-08 00:00 UTC')
-  expect(markup).toContain('OpenCharts · MIT')
+  expect(markup).toContain('role="menu" aria-label="Magnet mode"')
+  expect(markup).toMatch(/role="menuitemradio"[^>]*aria-checked="false"[^>]*>Off/)
+  expect(markup).toMatch(/role="menuitemradio"[^>]*aria-checked="true"[^>]*>Weak/)
+  expect(markup).toMatch(/role="menuitemradio"[^>]*aria-checked="false"[^>]*>Strong/)
+  expect(markup).not.toContain('Cmd/Ctrl')
  })
 
- it('does not present the saved Replay cutoff as a Live clock',()=>{
-  const markup=renderToStaticMarkup(createElement(WorkspaceStatusBar,{
-   mode:'live',chartCount:1,held:false,magnet:'none',stay:false,storageError:'',utcContext:'',onMagnetChange:noop,
+ it('wraps arrow navigation and supports Home and End',()=>{
+  expect(menuFocusIndex('ArrowDown',2,3)).toBe(0)
+  expect(menuFocusIndex('ArrowUp',0,3)).toBe(2)
+  expect(menuFocusIndex('Home',2,3)).toBe(0)
+  expect(menuFocusIndex('End',0,3)).toBe(2)
+  expect(menuFocusIndex('Enter',1,3)).toBeNull()
+ })
+})
+
+describe('workspace settings and licenses',()=>{
+ it('keeps chart settings and About & licenses inside the Settings menu',()=>{
+  const markup=renderToStaticMarkup(createElement(WorkspaceSettingsMenu,{
+   open:true,onOpenChartSettings:noop,onOpenAbout:noop,
   }))
-  expect(markup).not.toContain('<time')
+  expect(markup).toContain('role="menu" aria-label="Settings"')
+  expect(markup).toContain('Chart settings')
+  expect(markup).toContain('About &amp; licenses')
+ })
+
+ it('shows the OpenCharts license link only inside the About dialog',()=>{
+  const closed=renderToStaticMarkup(createElement(WorkspaceAboutDialog,{open:false,onClose:noop}))
+  const open=renderToStaticMarkup(createElement(WorkspaceAboutDialog,{open:true,onClose:noop}))
+  expect(closed).toBe('')
+  expect(open).toContain('About &amp; licenses')
+  expect(open).toContain('OpenCharts · MIT')
+  expect(open).toContain('Lightweight Charts · Apache 2.0')
  })
 })
 

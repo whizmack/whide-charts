@@ -1,5 +1,21 @@
 # Replay — průběh
 
+## 2026-10-30 — Live Watchlist a starší Live historie
+
+- Otevřený Watchlist odebírá skutečné 1m USD-M feedy pro BTCUSDT, ETHUSDT a
+  SOLUSDT i při Replay. Stav spojení a poslední close jsou oddělené od Replay
+  `asOf`; odběry sdílí `livePool` a při zavření panelu se uvolní.
+- Live graf může při posunu doleva žádat starší 500barové stránky přes
+  ohraničenou read-only proxy. Zůstávají v paměti grafu; Replay vnější historii
+  nedostává. Symboly ani timeframes se touto změnou nerozšířily.
+- V odděleném Vite originu se v Replay zobrazil stav Watchlistu `Live` a ceny
+  všech tří symbolů. Skutečné vyvolání starší stránky tažením grafu se v browseru
+  nepodařilo ověřit; screenshot/accessibility snapshot timeoutoval. Přesný stav,
+  co je ověřeno a co zůstává otevřené, je v
+  `docs/2026-10-30-live-watchlist-and-history-verification.md`.
+- Ověření: host 88 passed / 2 skipped, backend 34 passed, typecheck a build
+  prošly. Browser použil oddělený origin; uložený desktop workspace nebyl otevřen.
+
 ## 2026-10-26 — Handoff po TradingView-like drawing/UI etapě
 
 - Souvislý workspace shell, fixní 40px drawing rail, rozšířený drawing pack,
@@ -390,3 +406,46 @@ Added public Binance USD-M live candles alongside isolated replay, automatic sta
   checked the newly opened build and confirmed it looks OK; no chart settings,
   drawings or Replay state were changed by the implementation pass.
 - Detailed evidence: `docs/2026-10-29-color-picker-axis-label-verification.md`.
+
+## 2026-10-30 — TradingView Go to, axes, watchlist, and Replay comparison
+
+- Computer Use directly compared the installed Whide app with the open
+  TradingView app for Go to, price/time axis menus and submenus, the watchlist,
+  the right utility rail, Replay controls, the range/clock row, and the bottom
+  status bar. References 02, 05, and 08 were inspected.
+- Whide UTC seeking and available-history bounds remain intentional. Missing
+  axis actions, watchlist values for non-visible pairs, and TradingView-only
+  panels were recorded as real gaps or unsupported behavior; no inert controls
+  were added. Replay and workspace state were preserved.
+- The comparison used the apps' current desktop sizes. A matched 1280×720 and
+  narrow 390px review, source-backed prices/list management, and a safely
+  restored behavioral Replay check remain open. Floating Favorites is outside
+  this scope; the left drawing rail remains fixed at 40px.
+- Detailed evidence: `docs/2026-10-30-tradingview-cua-parity-verification.md`.
+
+## 2026-10-30 — Magnet menu and bottom status row
+
+- Removed the separate bottom status row; the Replay transport and range/time
+  row remain. The 40px drawing rail and chart TradingView attribution stay in
+  place.
+- The magnet button on the fixed left rail opens Off / Weak / Strong. The
+  selected value continues to use the existing workspace preference and backup
+  field; Cmd/Ctrl snap remains available without a visible shortcut hint.
+- Moved OpenCharts and Lightweight Charts license links under Settings → About
+  & licenses. Storage write errors remain visible only when one occurs.
+- Verified with `npm test`: 90 passed / 2 skipped; `npm run build` passed
+  (including typecheck). Computer Use could not attach to Chrome in this pass
+  (`getApp` timed out twice), so the edited UI still needs visual verification.
+
+### Follow-up visual verification
+
+- A separate Incognito Vite preview confirmed removal of the bottom status row,
+  retained Replay/range rows and chart attribution, and the visible Off / Weak /
+  Strong Magnet menu. No saved workspace was opened.
+- The Settings menu exposed About & licenses in the accessibility tree, but the
+  dialog could not be opened visually. Off/Strong selection behavior also
+  remains unverified. See the follow-up in
+  `docs/2026-10-30-tradingview-cua-parity-verification.md`.
+- A fresh combined-worktree check passed: backend 34 passed, host 90 passed / 2
+  skipped, typecheck, build, and `git diff --check`. Computer Use failed to
+  reconnect to Chrome on this follow-up, so it added no visual evidence.

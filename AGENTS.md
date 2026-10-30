@@ -20,8 +20,10 @@ nepotřebuje účet ani API klíče a zatím nemá engine vyhodnocující obchod
   rootu `/`, packagingu a datových invariantů.
 - Graf OpenCharts na `/` je hlavní aplikace a pracovní plocha. Uživatel chce
   vizuální kompozici co nejbližší dodaným TradingView desktop screenshotům:
-  horní lištu, kreslicí nástroje vlevo, utility vpravo, spodní lištu, tmavý graf,
-  watchlist, nastavení, indikátory, kreslicí menu a Replay ovládání.
+  horní lištu, kreslicí nástroje vlevo, utility vpravo, spodní ovládací řádek
+  časového rozsahu, tmavý graf, watchlist, nastavení, indikátory, kreslicí menu
+  a Replay ovládání. Samostatný spodní status bar byl na pokyn uživatele
+  2026-10-30 odstraněn.
   Kanonické screenshoty jsou v `docs/reference/tradingview/README.md`; před
   vizuální změnou otevři příslušné obrázky z tohoto indexu.
   Nevymýšlej vizuální rozložení tam, kde screenshoty dávají referenci.
@@ -195,7 +197,8 @@ pokud `dist/` při vytváření app neexistovalo, také restart backendu.
    konec dostupné historie zastaví přehrávání.
 5. Renderer, indikátory, legendy i drawing/object UI smějí dostat jen bezpečný
    prefix. Nativní replay knihovny nesmí převzít aplikační clock ani dotáhnout
-  budoucí historii. Chart pagination zůstává uvnitř dodaného okna 1 000 barů.
+  budoucí historii. Replay pagination zůstává uvnitř dodaného bezpečného okna
+  1 000 barů; pouze Live může žádat starší omezené stránky přes feed proxy.
 6. Starý request nesmí přepsat novější selection ani po ignorovaném abortu.
    Zachovej generation guards. Při rewindu ihned skryj pozdější painted data,
    včetně cache nativního grafu; nesmí probliknout ani během loadingu.
@@ -239,6 +242,13 @@ pokud `dist/` při vytváření app neexistovalo, také restart backendu.
   zastaví socket a recovery timery, při návratu nejdřív emituje cache a znovu
   spustí připojení. První Live načtení daného páru/timeframe po startu procesu
   stále čeká na veřejný Binance feed. Cache se neukládá na disk.
+- Otevřený Watchlist odebírá 1m Live feed pro BTCUSDT, ETHUSDT a SOLUSDT bez
+  ohledu na režim grafu a zobrazuje poslední close. Odběry sdílí `livePool` s
+  viditelnými grafy a Watchlist je při zavření uvolní.
+- Při posunu v Live může OpenCharts požádat o starší ohraničenou stránku přes
+  read-only `/api/live/klines` (`limit` nejvýše 1 000). Stránky zůstávají jen
+  v paměti grafu; nedostupná nebo nesouvislá data se nedoplňují. V Replay host
+  adapter vnější historii odmítá, aby se Live data nedostala za `asOf`.
 - localStorage patří originu/prohlížeči. Vite port, 8765, `localhost` a
   `127.0.0.1` nemusí sdílet nastavení. Při diagnostice persistence ověř origin.
   „Export backup“ OpenCharts je snapshot konfigurace/kreseb, ne kompletní záloha
@@ -298,8 +308,11 @@ Pokud oprava patří do vendoru:
 Úprava pouze v `node_modules` nebo `dist` není doručená oprava. Host `npm test`
 **nespouští** regresní testy uložené uvnitř vendor patche.
 
-Zachovej licence, NOTICE a viditelné atribuce OpenCharts/TradingView. Archivní
-Vela licence ponech v repozitáři; Vela frontend není součástí aplikace.
+Zachovej LICENSE a NOTICE soubory OpenCharts/Lightweight Charts a atribuční
+logo TradingView v grafu. Odkazy na OpenCharts · MIT a Lightweight Charts ·
+Apache 2.0 jsou dostupné pod Settings → About & licenses; nenechávej OpenCharts
+licenci ve spodní liště. Archivní Vela licence ponech v repozitáři; Vela
+frontend není součástí aplikace.
 Dokumentovaný původ a podmínky Binance datasetu jsou oddělené od licence
 stahovacích skriptů. Novou distribuci nebo změnu použití dat posuzuj podle
 aktuálních primárních podmínek, nikoli historického auditu.

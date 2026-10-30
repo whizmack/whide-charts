@@ -219,24 +219,24 @@ inventing history or violating the bounded replay window.
    Replay, layout, and the search/settings actions Whide actually provides.
    Pair search, grouped supported intervals, layout, and the indicator browser
    are implemented; the full matched-viewport review remains.
-2. Finish the Go to date/calendar visual comparison in the packaged desktop
-   app; Whide's dialog has been opened and cancelled, but TradingView's live
-   screenshot did not update from its indicator browser. Keep UTC and
-   loaded-data bounds intact.
-3. Finish supported axis-menu parity, including a fresh visual comparison of
-   Labels and Lines submenus. Whide's checked states are recorded above, but
-   TradingView's price-scale menu could not be reopened while its app was being
-   changed by the user. Keep unsupported actions unavailable until Whide has
-   real chart behavior for them; add Exchange only with explicit Binance-to-UTC
-   semantics and persistence.
-4. Tighten the watchlist panel and right-rail navigation against the reference.
-5. Recompose Replay, the range/clock row, and the bottom status line against
-   reference 08 while preserving licensing attribution and status information.
-6. Finish with the floating Favorites drawing toolbar. The existing left rail
-   remains fixed at 40 px.
-7. Recheck each opened/closed menu and settings tab at a matched 1280×720
-   viewport, then at the narrow viewport. Record screenshots and interaction
-   evidence before calling the broad parity audit complete.
+2. Go to and price/time axis menus have now been compared directly in Computer
+   Use, including Labels and Lines submenus. Preserve UTC and loaded-data bounds;
+   leave unsupported actions absent until their renderer behavior exists.
+3. The watchlist and right utility rail have now been compared directly.
+   Their present compact geometry is close; source-backed values for
+   non-visible pairs and real list management remain product gaps. Do not add
+   TradingView account-specific symbols or inert controls.
+4. Replay controls, quick-range/clock row, and bottom status bar have now been
+   compared directly against reference 08 and the live app. Their clock and
+   navigation models differ by design; a matched-viewport composition review
+   and a safely restored behavioral Replay check remain open.
+5. Review opened surfaces at matched 1280×720 and narrow 390px widths before
+   calling the broad parity audit complete. The 2026-10-30 direct comparison
+   record is in
+   [the Computer Use verification report](2026-10-30-tradingview-cua-parity-verification.md).
+
+The floating Favorites drawing toolbar is outside the current scope. The
+existing left drawing rail remains fixed at 40 px.
 
 ## Limits of this audit
 
