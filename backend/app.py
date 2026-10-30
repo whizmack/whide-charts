@@ -42,6 +42,13 @@ def create_app(store: Store) -> FastAPI:
             return JSONResponse({"detail": "Changes are only allowed from the local application."}, status_code=403)
         return await call_next(request)
 
+    @app.middleware("http")
+    async def revalidate_frontend(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path in ("/", "/index.html") or request.url.path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "no-cache, max-age=0, must-revalidate"
+        return response
+
     @app.get("/api/markets")
     def markets():
         return {"markets": store.markets(), "datasetVersion": store.version(), "timeframes": list(TIMEFRAMES)}

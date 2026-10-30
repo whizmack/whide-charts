@@ -8,6 +8,33 @@ export class ChartBus{
  private views:Record<string,{from:number;to:number}>;private saveTimer?:ReturnType<typeof setTimeout>
  constructor(views:Record<string,{from:number;to:number}>={},private save?:(views:Record<string,{from:number;to:number}>)=>void){this.views=views}
  syncTime=false;syncCrosshair=true
+ private pricePort(cell:string){return [...this.ports.values()].find(p=>p.cell===cell&&p.id.endsWith(':price'))}
+ timeBounds(cell:string):{start:number;last:number;end:number}|null{
+  const port=this.pricePort(cell)
+  if(!port?.times.length)return null
+  const last=port.times.at(-1)!*1000
+  return {start:port.times[0]*1000,last,end:last+port.width*1000}
+ }
+ setVisibleTimeRange(cell:string,range:{from:number;to:number}):boolean{
+  const port=this.pricePort(cell)
+  if(!port?.times.length||!Number.isFinite(range.from)||!Number.isFinite(range.to)||range.to<=range.from)return false
+  port.chart.timeScale().setVisibleRange({from:(range.from/1000) as UTCTimestamp,to:(range.to/1000) as UTCTimestamp})
+  return true
+ }
+ centerOnTime(cell:string,time:number):boolean{
+  const port=this.pricePort(cell)
+  if(!port?.times.length||!Number.isFinite(time))return false
+  const scale=port.chart.timeScale(),visible=scale.getVisibleLogicalRange(),last=port.times.length-1
+  const span=visible&&visible.to>visible.from?visible.to-visible.from:Math.min(100,Math.max(1,last))
+  const center=Math.max(0,Math.min(last,logicalAt(port.times,time/1000,port.width)))
+  let from=center-span/2,to=center+span/2
+  if(from<0){to-=from;from=0}
+  if(to>last){from-=to-last;to=last}
+  from=Math.max(0,from)
+  if(to<=from)to=from+1
+  scale.setVisibleLogicalRange({from,to})
+  return true
+ }
  add(port:ChartPort){
   this.remove(port.id);this.ports.set(port.id,port);const saved=this.views[port.cell]
   const range=(r:LogicalRange|null)=>{

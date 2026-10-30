@@ -45,5 +45,6 @@ if (existsSync(installedApp)) {
   rmSync(installedApp, { recursive: true, force: true })
 }
 run('ditto', [outputApp, installedApp])
+rmSync(join(buildRoot, 'out'), { recursive: true, force: true })
 console.log(`Installed ${installedApp}`)
 console.log(`Using market data at ${initialDataDirectory}`)

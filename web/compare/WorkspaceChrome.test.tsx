@@ -10,13 +10,17 @@ import {
  PairSelector,
  ReplayTransport,
  shouldShowCellCaption,
+ WorkspaceRangeToolbar,
  WorkspaceDrawingRailHost,
  WorkspaceStatusBar,
  WorkspaceUtilityRail,
  activeDrawingRailHost,
+ filterSupportedPairs,
 } from './WorkspaceChrome'
-import {initialWorkspace} from './workspace'
+import {initialWorkspace,QUICK_RANGES} from './workspace'
+import {ChartBus} from './chartBus'
 import type {DrawingStore} from './ChartCell'
+import {filterIndicatorTypes,IndicatorBrowser} from './IndicatorBrowser'
 
 const noop=vi.fn()
 
@@ -32,12 +36,42 @@ describe('workspace drawing rail',()=>{
 })
 
 describe('workspace utility rail',()=>{
- it('renders the pair picker as a named menu instead of a native select',()=>{
+ it.each([
+  ['ETH',['ETHUSDT']],
+  ['ethereum tether',['ETHUSDT']],
+  ['USDT',['BTCUSDT','ETHUSDT','SOLUSDT']],
+  ['usd-m perpetual',['BTCUSDT','ETHUSDT','SOLUSDT']],
+  ['unknown',[]],
+ ] as const)('filters supported pairs by symbol, asset, and market terms (%s)',(query,expected)=>{
+  expect(filterSupportedPairs(query)).toEqual(expected)
+ })
+
+ it('renders the pair picker as a named search dialog instead of a native select',()=>{
   const markup=renderToStaticMarkup(createElement(PairSelector,{value:'BTCUSDT',onChange:noop}))
   expect(markup).toContain('aria-label="Pair"')
-  expect(markup).toContain('aria-haspopup="menu"')
+  expect(markup).toContain('aria-haspopup="dialog"')
   expect(markup).toContain('BTCUSDT')
   expect(markup).not.toContain('<select')
+ })
+
+ it.each([
+  ['moving average','all',['SMA','EMA','MACD']],
+  ['','overlays',['SMA','EMA','BOLL','VWAP']],
+  ['pane','oscillators',['RSI','MACD','ATR','STOCH']],
+  ['overlay','oscillators',[]],
+ ] as const)('filters the indicator browser by text and supported category (%s / %s)',(query,category,expected)=>{
+  expect(filterIndicatorTypes(query,category)).toEqual(expected)
+ })
+
+ it('shows each indicator placement once in its own compact table column',()=>{
+  const markup=renderToStaticMarkup(createElement(IndicatorBrowser,{
+   open:false,symbol:'BTCUSDT',timeframe:'4h',active:[],triggerRef:{current:null},onClose:noop,onToggle:noop,onEdit:noop,
+  }))
+  expect(markup).toContain('class="indicator-browser-code-spacer" aria-hidden="true"></span><span>NAME</span><span class="indicator-browser-heading-placement">PLACEMENT</span>')
+  expect(markup).toContain('class="indicator-browser-heading-placement">PLACEMENT</span>')
+  expect(markup).toContain('class="indicator-browser-type">Price overlay</span>')
+  expect(markup).toContain('class="indicator-browser-type">Separate pane</span>')
+  expect(markup).toContain('role="status" aria-live="polite" aria-atomic="true">8 indicators found</div>')
  })
 
  it('keeps the responsive Indicators icon named and discoverable',()=>{
@@ -81,6 +115,24 @@ describe('workspace utility rail',()=>{
 })
 
 describe('workspace transport and status',()=>{
+ it('renders TradingView date ranges and a date/custom-range Go to dialog',()=>{
+  const markup=renderToStaticMarkup(createElement(WorkspaceRangeToolbar,{
+   cell:'chart-1',timeframe:'1h',mode:'live',asOf:0,bus:new ChartBus(),
+  }))
+  expect(markup).toContain('aria-label="Chart date ranges"')
+  for(const range of QUICK_RANGES)expect(markup).toContain(`aria-label="${range} chart range"`)
+  expect(markup).toContain('aria-label="Go to date and time"')
+  expect(markup).toContain('class="workspace-goto-dialog"')
+  expect(markup).toContain('role="tablist" aria-label="Go to options"')
+  expect(markup).toContain('Date')
+  expect(markup).toContain('Custom range')
+  expect(markup).toContain('aria-label="Go to calendar"')
+  expect(markup).toContain('class="workspace-range-clock"')
+  expect(markup).toContain('aria-label="Current UTC time"')
+  expect(markup).toContain(' UTC</time>')
+  expect(markup).toContain('aria-label="Go to date and time · UTC"')
+ })
+
  it('renders the complete paused Replay transport',()=>{
   const markup=renderToStaticMarkup(createElement(ReplayTransport,{
    asOf:Date.UTC(2023,0,8),

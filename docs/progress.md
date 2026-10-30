@@ -180,3 +180,213 @@ Added public Binance USD-M live candles alongside isolated replay, automatic sta
 - Verification: `npm test` 61 passed / 2 skipped; `npm run typecheck` and
   `npm run build` passed; `uv run pytest -q` 32 passed with one existing
   Starlette/httpx deprecation warning.
+
+## 2026-10-27 — TradingView-style chart settings
+
+- Replaced the generic chart dialog with Symbol, Status line, Scales and lines,
+  and Canvas tabs, connected to shared workspace preferences and real chart,
+  axis, legend, and canvas effects.
+- Added transactional draft preview, OK commit, Cancel/Escape/backdrop rollback,
+  tab-scoped reset, and local named settings templates.
+- Rebuilt the pinned OpenCharts package from a clean clone, refreshed the host
+  lockfile, and installed the updated Electron app. Tarball SHA-256:
+  `e9e7b2accae49ad8ad1a2de5eca8f1a65ffd67be7f43c81b1cfb9fc0689f64db`.
+- Fixed a backdrop dismissal bug found in the installed app and added a vendor
+  regression test. Vendor suite: 324 passed / 1 skipped. Host suite: 62 passed /
+  2 skipped; typecheck and build passed; backend: 32 passed with the existing
+  Starlette/httpx deprecation warning.
+- Electron checks covered settings in 1/2/4 chart layouts, template workflows,
+  Cancel/Escape/backdrop, reset, shared status-line effects, OK persistence
+  after reload, and restoring the original one-chart paused Replay workspace.
+  Responsive checks at 1280×720 and 390×720 remain unverified because CUA
+  window-coordinate input returned `noWindowsAvailable`. Live TradingView
+  settings interactions also remain unverified because its visible settings
+  panel could not be rendered by CUA. Full evidence:
+  `docs/2026-10-27-chart-settings-verification.md`.
+
+## 2026-10-27 — TradingView shell parity baseline
+
+- Inspected the live TradingView chart shell and Go to date dialog alongside
+  the Whide Charts `/` preview and the supplied desktop references. Recorded
+  verified matches, visual/function gaps, product-specific exclusions, and the
+  next implementation order in `docs/2026-10-27-tradingview-parity-audit.md`.
+- Added nine chart date-range controls, loaded-bar-bounded range mapping, a Go
+  to loaded timestamp affordance, and a live UTC clock; aligned chart-bus IDs
+  between the host controls and vendor renderer.
+- Tuned the selected drawing tool surface toward TradingView's neutral dark
+  selection color. The existing paused Replay timestamp and workspace were
+  preserved during visual inspection.
+- The Go to UI is still simpler than TradingView's Date/Custom range calendar;
+  axis menus, the full indicator browser, broader toolbar menus, and floating
+  Favorites remain follow-up work. This parity baseline is not a claim of
+  complete one-to-one behavior.
+
+## 2026-10-27 — TradingView menu audit and Go to calendar
+
+- Inspected TradingView's interval picker, symbol search, chart-style list,
+  settings shell and Go to dialog. The interval picker groups values by unit,
+  exposes custom intervals and favorite stars; symbol search groups exchange
+  instruments under asset-category tabs. These structures are recorded in the
+  parity audit. AX state for some opened menus did not match the captured
+  screenshot, so those details are marked as AX-only.
+- Replaced the working-tree Go to form with a centered Date/Custom range
+  dialog, UTC date/time fields, a bounded month calendar and range highlighting.
+  Both date navigation and custom ranges stay inside the loaded bars.
+- Targeted checks: 25 workspace/helper tests passed; `git diff --check` passed
+  for the Go to files. The installed Electron app still serves the previous
+  build; full build and visual verification remain outstanding.
+
+## 2026-10-27 — TradingView axis and layout comparison
+
+- Reopened the live TradingView Layout setup, price-scale menu, time-scale menu,
+  and Settings while preserving BTCUSDT/1h and cancelling the settings dialog.
+  The scale menus are separate and axis-specific. The Settings accessibility
+  tree exposed Trading, Alerts, and Events controls, but their visible content
+  could not be confirmed because screenshots stayed on Scales and lines.
+- Rechecked Whide's open time-axis context menu: it is a generic five-action
+  menu (reset view, copy price, alert, object tree, chart settings) centered on
+  the plot, not an axis menu. Dismissed it without changing chart state.
+- Changed the layout popover source styling to TradingView's black surface,
+  neutral white selected state, subtle dividers and neutral checkbox accent.
+  This was visually checked in the local Vite preview; no desktop package was
+  rebuilt or installed.
+- Recorded these observations in `docs/2026-10-27-tradingview-parity-audit.md`.
+  The next shell-parity implementation priority remains separate, axis-anchored
+  price-scale and time-scale menus with only supported real actions.
+
+## 2026-10-27 — Axis menu parity follow-up
+
+- Implemented and visually rechecked the installed Whide price-scale and
+  time-scale menus beside TradingView: both open at the clicked axis, use a
+  compact charcoal surface with separators, and expose only actions backed by
+  chart behavior. The timezone submenu is tall, scrollable and opens beside the
+  parent menu.
+- Added the TradingView `Chongqing` timezone entry (`Asia/Chongqing`, UTC+8).
+  TradingView also offers `Exchange`; Whide does not expose it until the
+  preference can persist Exchange as a distinct value with Binance's UTC
+  semantics.
+- `npm run build` and `npm run desktop:build` passed. The rebuilt app was opened,
+  its Live BTCUSDT/4h feed reconnected, and the timezone accessibility list
+  confirmed `Chongqing` with UTC still selected. No settings or chart appearance
+  were changed.
+- TradingView remained BTCUSDT/1h. Its accessibility tree exposed UTC,
+  Exchange, and the timezone list; during this pass, its screenshots stayed on
+  the Events settings view, so the timezone observation is AX-only. A full
+  matched-viewport layout-menu comparison is still outstanding.
+
+## 2026-10-28 — TradingView layout menu follow-up
+
+- Replaced Whide's text-and-checkbox layout popover with icon-only chart
+  diagrams grouped by supported chart count, matching TradingView's compact
+  rows, dark panel, separators, white selected tile, and neutral sync switches.
+  Kept the five implemented layouts and the real Crosshair and Time & scrolling
+  settings; did not add unsupported template or sync controls.
+- Rebuilt the macOS desktop app with `npm run desktop:build` and opened it.
+  Returned the workspace to Live BTCUSDT/4h; the accessibility state confirmed
+  the Binance USD-M feed was updating. Opened the layout menus in both apps
+  without selecting a layout. TradingView remained BTCUSDT/1h.
+- Direct desktop screenshots show close agreement in panel width, tile size,
+  row density, colors, dividers, selection and switches. Remaining differences
+  are TradingView's larger set of layout templates and its Symbol, Interval
+  and Date range sync controls, which Whide does not implement.
+- No candle settings, symbol, timeframe, viewport, or workspace layout were
+  changed. The chart-style preferences remain the user's own. The menus were
+  compared at the current desktop sizes; matched 1280×720 and narrow-window
+  checks remain outstanding.
+
+## 2026-10-28 — TradingView indicator browser
+
+- Replaced the small Indicators popover with a centered native browser modeled
+  on TradingView's title, search, category rail and result-list composition.
+  Tightened row density and gave real chart placement its own column.
+- Kept the catalog to Whide's eight supported studies. Search, overlay and
+  oscillator categories, aligned placement column, announced result count,
+  visible category focus, Escape dismissal and focus return were checked in the
+  installed Electron app beside TradingView. No study was selected or removed.
+- `npm test`: 78 passed / 2 skipped; `npm run typecheck` and
+  `npm run desktop:build` passed. The packaged app was returned to Live
+  BTCUSDT/4h and its Binance USD-M feed updated.
+- Matched 1280×720 and narrow 390×720 checks, plus study add/remove/settings
+  behavior, remain open. Detailed evidence:
+  `docs/2026-10-28-indicator-browser-verification.md`.
+- Opened and cancelled Whide's packaged Go to dialog without submitting a date.
+  TradingView's accessibility tree showed its Go to tabs, but its screenshot
+  stayed on the indicator browser, so a direct visual comparison remains open.
+
+## 2026-10-28 — TradingView time-scale labels
+
+- Compared Whide's live Scales and lines tab against reference 05. Added
+  **Day of week on labels**, enabled by default to match the reference and
+  retained through the existing preference/template stores. Only daily axis
+  ticks receive a weekday prefix in the selected display timezone; the numeric
+  chart times and UTC Replay clock stay unchanged.
+- The Labels submenu reports Price scale and Last value label checked; Lines
+  reports Current price line checked. No submenu option or chart setting was
+  changed. TradingView reported a user change while its price-scale menu was
+  being opened, so the fresh submenu contents still need a direct comparison.
+- In the pinned OpenCharts clone, 328 tests passed / 1 skipped, typecheck
+  passed, and package check passed. The library build and pack completed; the
+  build printed existing ImportMeta `env`/`glob` type diagnostics from the
+  upstream declaration step. A clean host `npm ci` completed; host tests passed
+  (78 passed / 2 skipped), typecheck and build passed, and
+  `npm run desktop:build` exited 0 and installed the app under `~/Applications`.
+- Live desktop verification of the new checkbox and rendered labels is still
+  open: CUA timed out after 60 seconds when attaching to both the running app
+  and the freshly built bundle. No settings were changed during those attempts.
+- Reference 05 exposes further scale controls that Whide does not support yet.
+  They remain audit gaps rather than inert checkboxes.
+
+## 2026-10-28 — TradingView price-scale inversion
+
+- Added the **Invert scale** checkbox to the price-axis context menu. Its
+  shared preference defaults off, is included in settings templates, and maps
+  to the pinned renderer's `invertScale` option on the selected left/right axis.
+- TDD checks in the pinned OpenCharts clone failed first for the absent
+  preference and mapping, then passed. The full vendor suite passed (331 passed
+  / 1 skipped); typecheck, package check, and patch reproduction passed. A
+  clean pinned clone built a tarball byte-identical to the source clone.
+- Host `npm ci`, 78 tests / 2 skipped, typecheck, web build, and 32 backend
+  tests passed. `npm run desktop:build` exited 0 and installed the app.
+- The price-menu item still needs a visual check: CUA found both installed and
+  build-output apps with the same bundle ID, then timed out reading the exact
+  installed app path after 30 seconds. The app appeared as running afterward;
+  no preference was toggled.
+
+## 2026-10-28 — TradingView price-label overlap
+
+- Added **No overlapping labels** to the Scales and lines tab. It defaults on,
+  persists in shared chart preferences and templates, and uses the pinned
+  renderer's `alignLabels` option on both price scales.
+- TDD preference, option mapping and template tests failed first and passed
+  after implementation. A settings-dialog test covers the checked default and
+  toggle interaction.
+- Pinned vendor tests passed (335 / 1 skipped), as did typecheck, package
+  check, clean patch application and clean-clone packaging. The clean tarball
+  matches the source-clone tarball byte-for-byte. `build:lib` exited 0 with
+  existing upstream `ImportMeta.env` / `glob` declaration diagnostics.
+- `npm run desktop:build` completed and installed the app. Computer Use timed
+  out after 30 seconds while binding the exact installed app path; the checkbox
+  and rendered label spacing remain visually unconfirmed. No chart setting was
+  changed.
+
+## 2026-10-30 — TradingView typography and OHLC status line
+
+- Removed the active chart header's forced monospace styling and aligned its
+  font with the TradingView stack used by the workspace, axes, price badges,
+  picker, vendor UI utilities and drawing canvas labels. Numerals use tabular
+  lining figures.
+- OHLC and change values now use the displayed candle's rendered body color,
+  including user-configured up/down colors and previous-close coloring in both
+  Replay and Live.
+- `npm test`: 81 passed / 2 skipped; typecheck, build and
+  `npm run desktop:build` passed. Targeted vendor tests: 10 passed; vendor
+  typecheck passed. The vendor tarball hash matches `package-lock.json`, and
+  packaged JS/CSS match `dist`.
+- The full upstream vendor suite still has 13 baseline failures, reproduced
+  with the prior patch. Computer Use inventory sees TradingView and Whide, but
+  attachment to either native window timed out. The new build is installed at
+  `~/Applications/Whide Charts.app` using the existing `.data`; its already
+  running process was not restarted during packaging. The user subsequently
+  checked the newly opened build and confirmed it looks OK; no chart settings,
+  drawings or Replay state were changed by the implementation pass.
+- Detailed evidence: `docs/2026-10-29-color-picker-axis-label-verification.md`.

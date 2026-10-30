@@ -142,7 +142,8 @@ function createWindow() {
       sandbox: true,
     },
   })
-  window.loadURL(`http://${HOST}:${PORT}/?desktop=1`)
+  // Keep Chromium from reusing a heuristically fresh cached index after an app update.
+  window.loadURL(`http://${HOST}:${PORT}/?desktop=1&launch=${Date.now()}`)
 }
 
 async function stopOwnedBackend() {

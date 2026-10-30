@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest'
-import { defaultStudy, paneTypes, effectiveMagnet, applyModifierKey, barCloseCountdown, lastPriceBadgePlace, syncViewport, normalizeStudy } from './studies'
+import { defaultStudy, paneTypes, effectiveMagnet, applyModifierKey, barCloseCountdown, lastCandleBodyColor, syncViewport, normalizeStudy } from './studies'
 it('puts oscillators in their own lower panes and keeps price overlays on price',()=>{
   expect(paneTypes(['EMA','RSI','MACD','BOLL','ATR','STOCH','VWAP'])).toEqual(['RSI','MACD','ATR','STOCH'])
   expect(defaultStudy('RSI').placement).toBe('below')
@@ -22,15 +22,19 @@ it('formats remaining time until the current UTC bar closes',()=>{
   expect(barCloseCountdown(Date.UTC(2026,0,1,12,0,0),'5m')).toBe('5:00')
   expect(barCloseCountdown(Date.UTC(2026,0,1,13,0,0),'1h')).toBe('1:00:00')
 })
-it('pins the last-price badge so the price row sits on the last-price line',()=>{
-  expect(lastPriceBadgePlace(200,400,80)).toEqual({top:191,width:80})
-  expect(lastPriceBadgePlace(390,400,80)).toEqual({top:368,width:80})
-  expect(lastPriceBadgePlace(null,400,80)).toBeNull()
+it('uses the active candle body color for the countdown label',()=>{
+  const prefs={colorBarsByPreviousClose:true,candleBullBodyColor:'#00aa66',candleBearBodyColor:'#cc3355'}
+  expect(lastCandleBodyColor({open:10,close:9},{close:8},prefs,{up:'#26a69a',down:'#ef5350'})).toBe('#00aa66')
+  expect(lastCandleBodyColor({open:10,close:9},{close:11},prefs,{up:'#26a69a',down:'#ef5350'})).toBe('#cc3355')
 })
 it('bounds settings and retains a valid above-price pane configuration',()=>{
   const settings=normalizeStudy('RSI',{period:0,height:9999,placement:'above',color:'#abcdef',width:2})
   expect(settings.period).toBe(1);expect(settings.height).toBe(400);expect(settings.placement).toBe('above')
   expect(settings.color).toBe('#abcdef')
+})
+it('drops deferred precision from persisted study settings',()=>{
+  const previous={...defaultStudy('EMA'),precision:4}
+  expect(normalizeStudy('EMA',previous)).not.toHaveProperty('precision')
 })
 it('synchronizes logical ranges without recursive feedback',()=>{
   let aCalls=0,bCalls=0

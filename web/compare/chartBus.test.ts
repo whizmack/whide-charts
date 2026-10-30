@@ -2,12 +2,20 @@ import {expect,it} from 'vitest'
 import {ChartBus,type ChartPort} from './chartBus'
 import type {LogicalRange,Time,MouseEventParams,IChartApi} from 'lightweight-charts'
 function port(id:string,cell:string,times:number[],width:number,scaleWidth=0){
- let range={from:0,to:2} as LogicalRange;const ranges=new Set<(r:LogicalRange|null)=>void>(),cross=new Set<(p:MouseEventParams<Time>)=>void>();let marker:unknown=null,minimumWidth=0,horz=true
- const ts={getVisibleLogicalRange:()=>range,setVisibleLogicalRange:(r:LogicalRange)=>{range=r;for(const fn of ranges)fn(r)},subscribeVisibleLogicalRangeChange:(fn:typeof ranges extends Set<infer F>?F:never)=>ranges.add(fn),unsubscribeVisibleLogicalRangeChange:(fn:typeof ranges extends Set<infer F>?F:never)=>ranges.delete(fn)}
+ let range={from:0,to:2} as LogicalRange,visibleTimeRange:{from:number;to:number}|null=null;const ranges=new Set<(r:LogicalRange|null)=>void>(),cross=new Set<(p:MouseEventParams<Time>)=>void>();let marker:unknown=null,minimumWidth=0,horz=true
+ const ts={getVisibleLogicalRange:()=>range,setVisibleLogicalRange:(r:LogicalRange)=>{range=r;for(const fn of ranges)fn(r)},setVisibleRange:(r:{from:number;to:number})=>{visibleTimeRange=r},subscribeVisibleLogicalRangeChange:(fn:typeof ranges extends Set<infer F>?F:never)=>ranges.add(fn),unsubscribeVisibleLogicalRangeChange:(fn:typeof ranges extends Set<infer F>?F:never)=>ranges.delete(fn)}
  const chart={timeScale:()=>ts,subscribeCrosshairMove:(fn:typeof cross extends Set<infer F>?F:never)=>cross.add(fn),unsubscribeCrosshairMove:(fn:typeof cross extends Set<infer F>?F:never)=>cross.delete(fn),setCrosshairPosition:(value:number,time:number)=>{marker={value,time}},clearCrosshairPosition:()=>{marker=null},applyOptions:(o:{crosshair?:{horzLine?:{visible?:boolean}}})=>{if(typeof o.crosshair?.horzLine?.visible==='boolean')horz=o.crosshair.horzLine.visible},priceScale:()=>({width:()=>Math.max(scaleWidth,minimumWidth),options:()=>({minimumWidth}),applyOptions:(o:{minimumWidth?:number})=>{if(typeof o.minimumWidth==='number')minimumWidth=o.minimumWidth}})}
  const emit=(p:MouseEventParams<Time>)=>{for(const fn of cross)fn(p)}
- return {p:{id,cell,chart:chart as unknown as IChartApi,series:{} as ChartPort['series'],times,width,values:new Map(times.map((t,i)=>[t,10+i]))},move:(r:LogicalRange)=>ts.setVisibleLogicalRange(r),hover:(time:number)=>emit({time,point:{x:1,y:1},sourceEvent:{}} as MouseEventParams<Time>),echo:(time:number)=>emit({time,point:{x:1,y:1}} as MouseEventParams<Time>),leave:()=>emit({} as MouseEventParams<Time>),range:()=>range,marker:()=>marker,scale:()=>minimumWidth,horz:()=>horz,subscriptions:()=>ranges.size+cross.size}
+ return {p:{id,cell,chart:chart as unknown as IChartApi,series:{} as ChartPort['series'],times,width,values:new Map(times.map((t,i)=>[t,10+i]))},move:(r:LogicalRange)=>ts.setVisibleLogicalRange(r),hover:(time:number)=>emit({time,point:{x:1,y:1},sourceEvent:{}} as MouseEventParams<Time>),echo:(time:number)=>emit({time,point:{x:1,y:1}} as MouseEventParams<Time>),leave:()=>emit({} as MouseEventParams<Time>),range:()=>range,visibleTimeRange:()=>visibleTimeRange,marker:()=>marker,scale:()=>minimumWidth,horz:()=>horz,subscriptions:()=>ranges.size+cross.size}
 }
+it('sets the active chart to a selected UTC date range using bar timestamps',()=>{
+ const bus=new ChartBus(),chart=port('chart-1:price','chart-1',[0,300,600],300)
+ bus.add(chart.p)
+ expect(bus.timeBounds('chart-1')).toEqual({start:0,last:600_000,end:900_000})
+ expect(bus.setVisibleTimeRange('chart-1',{from:300_000,to:900_000})).toBe(true)
+ expect(chart.visibleTimeRange()).toEqual({from:300,to:900})
+ expect(bus.setVisibleTimeRange('missing',{from:0,to:60_000})).toBe(false)
+})
 it('synchronizes subpanes, optionally links other timeframes, and cleans disposed ports',()=>{
  const bus=new ChartBus(),a=port('a:price','a',[0,300,600,900],300),rsi=port('a:rsi','a',[0,300,600,900],300),b=port('b:price','b',[0,3600,7200],3600)
  bus.add(a.p);bus.add(rsi.p);bus.add(b.p);a.move({from:1,to:3} as LogicalRange)

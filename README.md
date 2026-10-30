@@ -139,11 +139,20 @@ per chart; visible Replay charts share a cutoff. Optional time/scroll and
 crosshair sync map by timestamps.
 
 RSI, MACD, ATR and Stochastic use separate resizable panes; EMA, SMA, Bollinger
-Bands and VWAP render over price. Study inputs, sources and styles are editable.
+Bands and VWAP render over price. Study settings use Inputs, Style and Visibility
+tabs; line appearance, price-scale labels, status-line values and supported
+timeframe visibility are editable per study.
 VWAP is calculated over loaded bars and labels its UTC reset boundary. Drawings
 and viewport controls include weak/strong magnet, temporary Cmd/Ctrl snap,
 stay-in-drawing mode and scoped undo/redo. Native chart appearance preferences
-are shared across the workspace.
+are shared across the workspace. Chart Settings now has Symbol, Status line,
+Scales and lines, and Canvas sections, with live chart preview, Cancel/Escape
+rollback, and a single persistent write on OK. Named appearance templates live
+in the existing scoped chart preference store and exclude Replay state, chart
+layout and drawings. Right-click price/time axis menus expose supported scale
+modes, side placement, price-scale inversion, label/line visibility, timezone,
+and reset behavior. Chart Settings also includes TradingView's **No overlapping
+labels** option, applied to both price scales and stored in named templates.
 
 Workspace configuration, Replay/Live selections, viewports and drawings persist
 locally under `opencharts-preview:`. **Export backup** downloads a JSON snapshot
