@@ -168,6 +168,16 @@ Launcher vždy buildí frontend, ale `npm ci` spustí jen při chybějícím
 `node_modules/`. Po změně JS dependencies, lockfile nebo vendor tarballu
 proveď instalaci explicitně. Již běžící server nezabíjej bez zjištění, komu patří.
 
+Po úspěšném pushi změn, které ovlivňují macOS aplikaci (obvykle na
+`origin/main`) a po dokončení odpovídajících kontrol, se uživatele zeptej,
+zda chce nainstalovanou aplikaci aktualizovat teď. U čistě dokumentačních změn
+se neptej. Aktualizaci spusť teprve po výslovném souhlasu příkazem
+`npm run desktop:build`; ten sestaví UI i Python sidecar a nahradí
+`~/Applications/Whide Charts.app`. Samotný commit ani push aplikaci
+neaktualizuje. Před dotazem ověř, zda aplikace běží; pokud ano, řekni, že ji
+bude třeba zavřít. Zavři ji až po souhlasu uživatele s aktualizací. Bez
+souhlasu neukončuj aktivní session.
+
 Pro hot reload spusť ve dvou terminálech z kořene projektu:
 
 ```sh
@@ -357,6 +367,17 @@ odkazů a diffu; kompletní suite opakuj, pokud je třeba ověřit uváděné p�
 | Live | `web/live.test.ts`, backend proxy testy: buffering při hydrataci, stale, timeout, reconnect/backfill, dispose a izolace od replaye. |
 | OpenCharts | `web/compare/*.test.ts`: časové jednotky, bezpečné okno, drawings, indikátory, layout persistence, sync podle timestampů. U vendor změny také testy v upstream klonu. |
 | Vizuální/interakční změna | Skutečný browser na `/`: render, pan/zoom, settings, drawing interactions, klávesnice/focus, modal/menu clipping, reload a konzole. |
+
+Při vizuální kontrole na macOS nezaměňuj úspěšný screenshot/accessibility tree
+za funkční souřadnicový vstup. Když CUA klik nebo tah vrátí
+`-10005: noWindowsAvailable`, hned znovu načti stav a screenshot: akce přesto
+mohla proběhnout. Neopakuj ji naslepo. Před každou akcí s číselným accessibility
+indexem načti nový tree a index z něj znovu odvoď; po změně menu/dialogu jsou
+staré indexy nebezpečné. Stav `browsers` kontroluj zvlášť: prázdný seznam
+znamená, že browser-tab bridge není připojený, i když proces Chrome běží.
+Případ a dnešní reprodukce jsou v
+[`docs/2026-10-30-computer-use-diagnostics.md`](docs/2026-10-30-computer-use-diagnostics.md);
+v dalším threadu stav CUA ověř znovu, protože tento záznam může zastarat.
 
 Pro workspace navíc zkus 1/2/4 charts, maximize/restore, různé páry/TF,
 společný cutoff, rewind, přepnutí Live/Replay, splitters/pane resize a magnet
