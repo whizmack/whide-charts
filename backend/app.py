@@ -83,11 +83,24 @@ def create_app(store: Store) -> FastAPI:
             raise HTTPException(409, str(e)) from e
 
     @app.get("/api/live/klines")
-    async def live_klines(symbol: Symbol, timeframe: Timeframe):
+    async def live_klines(
+        symbol: Symbol,
+        timeframe: Timeframe,
+        start_time: int | None = Query(default=None, ge=0, le=4102444800000, alias="startTime"),
+        end_time: int | None = Query(default=None, ge=0, le=4102444800000, alias="endTime"),
+        limit: int = Query(default=1000, ge=1, le=1000),
+    ):
         # Read-only proxy. Live data never enters immutable replay datasets.
+        if start_time is not None and end_time is not None and start_time >= end_time:
+            raise HTTPException(422, "The Live candle range must have an earlier startTime than endTime.")
+        params = {"symbol": symbol, "interval": timeframe, "limit": limit}
+        if start_time is not None:
+            params["startTime"] = start_time
+        if end_time is not None:
+            params["endTime"] = end_time
         try:
             async with httpx.AsyncClient(timeout=12) as client:
-                response = await client.get("https://fapi.binance.com/fapi/v1/klines", params={"symbol": symbol, "interval": timeframe, "limit": 1000})
+                response = await client.get("https://fapi.binance.com/fapi/v1/klines", params=params)
                 response.raise_for_status()
                 rows = response.json()
                 if not isinstance(rows, list):

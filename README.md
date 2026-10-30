@@ -55,6 +55,10 @@ Support/PerpReplay. Stávající data se při změně cesty automaticky nestěhu
   svíčku a rychlost 0.5×–10×. Všechny viditelné grafy sdílí Replay cutoff.
 - Live zobrazuje skutečné veřejné Binance USD-M svíčky. Při výpadku ukáže stav
   spojení nebo zastaralých dat; ceny nenahrazuje demo feedem.
+- Otevřený Watchlist zobrazuje průběžně aktualizované Live ceny i při Replay;
+  hodnoty nejsou omezené časem grafu.
+- V Live lze posunem doleva načíst starší svíčky po ohraničených stránkách.
+  Zůstávají pouze v paměti grafu a nejsou součástí uložené Replay historie.
 - Rozložení podporuje jeden až čtyři grafy, maximalizaci, nastavitelný split,
   volitelný watchlist a synchronizaci času nebo crosshairu.
 - Indikátory: SMA, EMA, Bollinger Bands, VWAP, RSI, MACD, ATR a Stochastic.
@@ -125,6 +129,11 @@ shared cutoff. Replay remains usable offline after history has been downloaded.
 Live needs internet access. The UI shows stale/connection states during a feed
 outage and never substitutes demo prices. Optional integration checks against
 the live exchange are:
+
+When the Watchlist is open, it subscribes to the supported symbols' 1m feeds
+and keeps their last prices live during Replay. In Live mode, panning left can
+request older Binance USD-M candles in bounded pages; those pages stay in chart
+memory and are not added to Parquet, the dataset catalog, or localStorage.
 
 ```sh
 RUN_BINANCE_LIVE=1 npm test -- integration/live.test.ts

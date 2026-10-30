@@ -1,4 +1,4 @@
-import type { Bar } from './api'
+import {api,type Bar} from './api'
 import { MINUTES, type Symbol, type Timeframe } from './replay'
 export const streamURL = (symbol: Symbol, timeframe: Timeframe) => `wss://fstream.binance.com/market/ws/${symbol.toLowerCase()}@kline_${timeframe}`
 export type LiveState = { bars: Bar[]; status: 'connecting' | 'syncing' | 'live' | 'stale'; lastUpdate: number | null; error: string }
@@ -12,6 +12,17 @@ export function parseHistory(rows:unknown, timeframe:Timeframe):Bar[] {
   const bars=rows.map(r=>({time:Number(r[0]),open:Number(r[1]),high:Number(r[2]),low:Number(r[3]),close:Number(r[4]),volume:Number(r[5])}))
   const width=MINUTES[timeframe]*60000
   if (bars.some((b,i)=>!valid(b) || b.time%width!==0 || (i>0 && b.time!==bars[i-1].time+width))) throw new Error('Binance history contains invalid data or a gap.')
+  return bars
+}
+export async function loadLiveHistoryPage(symbol:Symbol,timeframe:Timeframe,fromMs:number,toMs:number,limit=500):Promise<Bar[]> {
+  const width=MINUTES[timeframe]*60000
+  if(!Number.isSafeInteger(fromMs)||!Number.isSafeInteger(toMs)||fromMs<0||toMs<=fromMs||fromMs%width!==0||toMs%width!==0) throw new Error('Invalid Live history page range.')
+  const pageLimit=Math.max(1,Math.min(1000,Number.isInteger(limit)?limit:500))
+  const query=new URLSearchParams({symbol,timeframe,startTime:String(fromMs),endTime:String(toMs-1),limit:String(pageLimit)})
+  const rows=await api<unknown>(`/live/klines?${query}`,{cache:'no-store'})
+  if(Array.isArray(rows)&&rows.length===0)return []
+  const bars=parseHistory(rows,timeframe)
+  if(bars.some(bar=>bar.time<fromMs||bar.time>=toMs)) throw new Error('Binance returned candles outside the requested Live history page.')
   return bars
 }
 export function parseKline(raw:string,symbol:Symbol,timeframe:Timeframe):{bar:Bar;eventTime:number}|null {

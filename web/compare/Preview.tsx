@@ -2,6 +2,7 @@ import {useEffect,useMemo,useRef,useState,type CSSProperties} from 'react'
 import {OpenChartsProvider,ChartSettingsDialog,useChartPreferences,type IndicatorType} from '@dylanpersonguy/opencharts'
 import type {Markets} from '../api'
 import {nextBoundary,type Symbol,type Timeframe} from '../replay'
+import {loadLiveHistoryPage} from '../live'
 import {loadOpenChartsBootstrap} from './bootstrap'
 import {previewAdapter} from './adapter'
 import {ChartCell,type DrawingStore,type CellStatus} from './ChartCell'
@@ -10,6 +11,7 @@ import {changeCell,chartBusCellId,initialWorkspace,loadWorkspace,visibleIds,type
 import {applyModifierKey,defaultStudy,normalizeStudy,type Magnet,type StudySettings} from './studies'
 import {StudySettingsDialog} from './StudySettings'
 import {IndicatorBrowser} from './IndicatorBrowser'
+import {WatchlistPanel} from './WatchlistPanel'
 import {ActiveChartMaximizeButton,CellCaption,createWorkspaceBackup,IndicatorToolbarButton,LiveTransport,PairSelector,ReplayTransport,shouldShowCellCaption,TimeframeSelector,WorkspaceDrawingRailHost,WorkspaceRangeToolbar,WorkspaceStatusBar,WorkspaceUtilityRail} from './WorkspaceChrome'
 const prefix='opencharts-preview:'
 const desktopShell=typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('desktop')==='1'
@@ -30,7 +32,11 @@ export default function Preview(){
  const [drawings,setDrawings]=useState<DrawingStore>(()=>read('workspace-drawings',Object.fromEntries(Object.entries(read<DrawingStore>('drawings',{})).map(([k,v])=>['chart-1:'+k,v])))),[settings,setSettings]=useState(false),[indicatorsOpen,setIndicatorsOpen]=useState(false),[layoutOpen,setLayoutOpen]=useState(false),[sidebar,setSidebar]=useState(()=>read('sidebar',false)),[maximized,setMaximized]=useState<string|null>(null),[studyEdit,setStudyEdit]=useState<{cell:string;type:IndicatorType}|null>(null),[playing,setPlaying]=useState(false),[speed,setSpeed]=useState(1),[reset,setReset]=useState(0),[statuses,setStatuses]=useState<Record<string,CellStatus>>({}),[error,setError]=useState(''),[storageError,setStorageError]=useState('')
  const [magnet,setMagnet]=useState<Magnet>(()=>read('magnet','none')),[stay,setStay]=useState(()=>read('stay',false)),[held,setHeld]=useState(false)
  const [drawingRailHost,setDrawingRailHost]=useState<HTMLDivElement|null>(null),indicatorTriggerRef=useRef<HTMLButtonElement>(null)
- const bus=useMemo(()=>new ChartBus(read('views',{}),views=>{try{localStorage.setItem(prefix+'views',JSON.stringify(views))}catch{/* Other workspace writes expose the storage error. */}}),[]),adapter=useMemo(()=>previewAdapter(()=>({symbol:'',timeframe:'',bars:[]})),[])
+ const modeRef=useRef(mode);modeRef.current=mode
+ const bus=useMemo(()=>new ChartBus(read('views',{}),views=>{try{localStorage.setItem(prefix+'views',JSON.stringify(views))}catch{/* Other workspace writes expose the storage error. */}}),[]),adapter=useMemo(()=>previewAdapter(()=>({symbol:'',timeframe:'',bars:[]}),()=>modeRef.current==='live',async request=>{
+  const bars=await loadLiveHistoryPage(request.symbol as Symbol,request.timeframe as Timeframe,request.fromMs!,request.toMs!,request.limit)
+  return bars.map(bar=>({...bar,time:bar.time/1000}))
+ }),[])
  const current=mode==='live'?{...w,cells:liveCells}:w,ids=maximized?[maximized]:visibleIds(w),activeId=ids.includes(w.active)?w.active:ids[0],active=current.cells.find(c=>c.id===activeId)!,available=markets?.markets.find(m=>m.symbol===active.symbol)?.ranges[0]
  const allReady=ids.every(id=>statuses[id]?.ready&&!statuses[id]?.error)
  useEffect(()=>{let mounted=true;void loadOpenChartsBootstrap().then(({markets:m,version:v})=>{if(!mounted)return;setMarkets(m);setVersion(v);if(!read('workspace',null)){setW(prev=>({...prev,asOf:read('replay',{asOf:prev.asOf}).asOf}))}setReady(true)}).catch(e=>setError(e.message));return()=>{mounted=false}},[])
@@ -84,7 +90,7 @@ export default function Preview(){
     </section>}):<div className="compare-message" role="status">{error||'Loading local workspace…'}</div>}
     {!maximized&&['columns','three','four'].includes(w.layout)?divider('column'):null}{!maximized&&['rows','three','four'].includes(w.layout)?divider('row'):null}
    </div>
-   {sidebar?<aside className="workspace-watchlist"><header><h2>Watchlist</h2><span>{mode==='live'?'Live':'Replay snapshot'}</span></header><div className="watchlist-head"><span>Symbol</span><span>Last</span></div>{(['BTCUSDT','ETHUSDT','SOLUSDT'] as const).map(symbol=>{const c=current.cells.find(c=>ids.includes(c.id)&&c.symbol===symbol),p=c?statuses[c.id]?.close:null;return <button key={symbol} aria-pressed={active.symbol===symbol} onClick={()=>patchCell(activeId,{symbol})}><span className={`coin-icon ${symbol}`}>{symbol==='BTCUSDT'?'₿':symbol==='ETHUSDT'?'Ξ':'◎'}</span><strong>{symbol}</strong><span>{p?.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:symbol==='SOLUSDT'?3:2})??'—'}</span></button>})}<p>Prices from visible charts.<br/>Click a symbol to change the active chart.</p></aside>:null}
+   {sidebar?<WatchlistPanel activeSymbol={active.symbol} onSelect={symbol=>patchCell(activeId,{symbol})}/>:null}
    <WorkspaceUtilityRail watchlistOpen={sidebar} layoutOpen={layoutOpen} layoutButtonRef={layoutTriggerRef} onToggleWatchlist={()=>setSidebar(v=>!v)} onToggleLayout={()=>{setLayoutOpen(v=>!v);setIndicatorsOpen(false)}} onOpenSettings={()=>setSettings(true)} onExport={exportWorkspace}/>
   </main>
   {mode==='replay'?<ReplayTransport asOf={w.asOf} available={available} playing={playing} ready={allReady} speed={speed} timeframe={active.timeframe} onSeek={seek} onTogglePlaying={()=>setPlaying(v=>!v)} onStep={step} onSpeed={setSpeed}/>:null}

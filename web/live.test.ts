@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { LiveFeed, parseKline, parseHistory, type LiveState } from './live'
+import { LiveFeed, loadLiveHistoryPage, parseKline, parseHistory, type LiveState } from './live'
 const width = 60000, now = 1792009400000, start = Math.floor(now/width)*width
 const row = (t:number,c=100) => [t,'99','102','98',String(c),'5']
 const message = (t=start,c=101,s='BTCUSDT') => JSON.stringify({ e:'kline', E:now, s, k:{s,i:'1m',t,o:'99',h:'102',l:'98',c:String(c),v:'6'} })
@@ -24,6 +24,28 @@ it('validates symbol, interval and OHLCV, and refuses malformed prices',()=>{
   expect(parseKline(message().replace('"1m"','"5m"'),'BTCUSDT','1m')).toBeNull()
   expect(parseKline(message(start,NaN),'BTCUSDT','1m')).toBeNull()
   expect(()=>parseHistory([row(start),row(start+width*2)],'1m')).toThrow()
+})
+it('loads a bounded older Binance page and converts the half-open upper bound',async()=>{
+  const fetcher=vi.fn(async(_input:RequestInfo|URL,_options?:RequestInit)=>({ok:true,json:async()=>[row(start-2*width)]}))
+  vi.stubGlobal('fetch',fetcher)
+  const bars=await loadLiveHistoryPage('BTCUSDT','1m',start-2*width,start-width,500)
+  const [url,options]=fetcher.mock.calls[0]
+  const query=new URL(String(url),'http://localhost').searchParams
+  expect(query.get('symbol')).toBe('BTCUSDT')
+  expect(query.get('timeframe')).toBe('1m')
+  expect(query.get('startTime')).toBe(String(start-2*width))
+  expect(query.get('endTime')).toBe(String(start-width-1))
+  expect(query.get('limit')).toBe('500')
+  expect(options).toMatchObject({cache:'no-store'})
+  expect(bars).toEqual([{time:start-2*width,open:99,high:102,low:98,close:100,volume:5}])
+})
+it('returns an empty older page without inventing candles',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>[]})))
+  await expect(loadLiveHistoryPage('BTCUSDT','1m',start-2*width,start-width,500)).resolves.toEqual([])
+})
+it('rejects malformed or gapped older pages',async()=>{
+  vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>[row(start-3*width),row(start-width)]})))
+  await expect(loadLiveHistoryPage('BTCUSDT','1m',start-3*width,start,500)).rejects.toThrow('gap')
 })
 it('hydrates Live history while the WebSocket is still connecting',async()=>{
   const {feed,sockets,states,load}=setup()

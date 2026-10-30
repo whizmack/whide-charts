@@ -161,6 +161,9 @@ button,select,input{border-color:#303136;border-radius:3px}
 }
 .workspace-watchlist header{min-height:43px;padding:8px 10px;border-bottom-color:#2b2c2f}
 .workspace-watchlist h2{font-size:12px;font-weight:600}
+.workspace-watchlist .watchlist-connection{font-size:9px;color:#858990}
+.workspace-watchlist .watchlist-connection.live{color:#61cbb2}
+.workspace-watchlist .watchlist-connection.reconnecting{color:#edbd77}
 .watchlist-head{padding:7px 10px;border-bottom-color:#292a2d}
 .workspace-watchlist>button{min-height:32px;padding:5px 9px;border-bottom-color:#252629}
 .workspace-watchlist>button:hover{background:#1c1d20}
