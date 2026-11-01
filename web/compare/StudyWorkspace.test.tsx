@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { ChartBus } from "./chartBus";
+import { ChartBus, safePriceScaleWidth } from "./chartBus";
 import { defaultStudy } from "./studies";
 
 const { useChartPreferencesMock } = vi.hoisted(() => ({
@@ -15,7 +15,7 @@ vi.mock("@dylanpersonguy/opencharts", async (importOriginal) => ({
   useChartPreferences: useChartPreferencesMock,
 }));
 
-import { StudyWorkspace } from "./StudyWorkspace";
+import { BarCloseCountdown, StudyWorkspace } from "./StudyWorkspace";
 
 const enabledStatusLine = {
   showStatusLineStudyTitle: true,
@@ -34,6 +34,37 @@ const bars = Array.from({ length: 25 }, (_, index) => {
     close,
     volume: 10 + index,
   };
+});
+
+describe("last price and candle countdown", () => {
+  it("shows the live countdown only for Live and never for Replay", () => {
+    expect(BarCloseCountdown).toBeTypeOf("function");
+    useChartPreferencesMock.mockReturnValue({ showCountdown: true, showPriceScale: true, showLastValue: true });
+    const series = {
+      options: () => ({ priceLineColor: "#26a69a" }),
+      priceFormatter: () => ({ format: (price: number) => price.toFixed(2) }),
+    } as never;
+    const props = { timeframe: "5m" as const, chart: null, series, otherSeries: { current: [] }, last: bars.at(-1), previous: bars.at(-2) };
+    expect(renderToStaticMarkup(<BarCloseCountdown {...props} isReplaying={false} />)).toContain("last-price-badge__countdown");
+    expect(renderToStaticMarkup(<BarCloseCountdown {...props} isReplaying={true} />)).not.toContain("last-price-badge");
+    useChartPreferencesMock.mockReturnValue({ showCountdown: true, showPriceScale: true, showLastValue: false });
+    const countdownOnly = renderToStaticMarkup(<BarCloseCountdown {...props} isReplaying={false} />);
+    expect(countdownOnly).toContain("last-price-badge__countdown");
+    expect(countdownOnly).not.toContain("last-price-badge__price");
+    useChartPreferencesMock.mockReturnValue({ showCountdown: false, showPriceScale: true, showLastValue: true });
+    expect(renderToStaticMarkup(<BarCloseCountdown {...props} isReplaying={false} />)).toBe("");
+  });
+});
+
+describe("oscillator scale geometry", () => {
+  it("waits for a newly enabled price axis to exist before using its width", () => {
+    const width = vi.fn().mockImplementationOnce(() => { throw new Error("Value is null"); }).mockReturnValue(84);
+    const chart = { priceScale: () => ({ width }) } as never;
+    expect(safePriceScaleWidth(chart, "left")).toBeNull();
+    expect(safePriceScaleWidth(chart, "left")).toBe(84);
+    width.mockImplementationOnce(() => { throw new Error("unexpected failure"); });
+    expect(() => safePriceScaleWidth(chart, "left")).toThrow("unexpected failure");
+  });
 });
 
 describe("shared study legend preferences", () => {

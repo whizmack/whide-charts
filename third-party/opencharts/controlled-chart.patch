@@ -90,6 +90,40 @@ index 0000000..0dfaefa
 +    expect(within(picker).getByRole("button", { name: "Dashed" })).toBeInTheDocument();
 +  });
 +});
+diff --git a/src/__tests__/chart-resize.test.ts b/src/__tests__/chart-resize.test.ts
+new file mode 100644
+index 0000000..a7b0945
+--- /dev/null
++++ b/src/__tests__/chart-resize.test.ts
+@@ -0,0 +1,28 @@
++import { afterEach, expect, it, vi } from "vitest";
++import { observeChartSize } from "../lib/chart-resize";
++
++afterEach(() => vi.unstubAllGlobals());
++
++it("coalesces observed sizes into one frame and cancels pending work on disposal", () => {
++  const callbacks = new Map<number, FrameRequestCallback>();
++  let next = 0;
++  let deliver: ResizeObserverCallback = () => {};
++  const disconnect = vi.fn();
++  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callbacks.set(++next, callback); return next; });
++  vi.stubGlobal("cancelAnimationFrame", (id: number) => callbacks.delete(id));
++  vi.stubGlobal("ResizeObserver", class { constructor(callback: ResizeObserverCallback) { deliver = callback; } observe() {} disconnect = disconnect; });
++  const target = {} as HTMLElement;
++  const resize = vi.fn();
++  const dispose = observeChartSize(target, resize);
++  const send = (width: number, height: number) => deliver([{ target, contentRect: { width, height } } as ResizeObserverEntry], {} as ResizeObserver);
++  send(200, 100); send(320, 180);
++  expect(resize).not.toHaveBeenCalled();
++  expect(callbacks.size).toBe(1);
++  const frame = [...callbacks.values()][0]; callbacks.clear(); frame(0);
++  expect(resize).toHaveBeenCalledOnce();
++  expect(resize).toHaveBeenCalledWith(320, 180);
++  send(400, 200); dispose();
++  expect(disconnect).toHaveBeenCalledOnce();
++  expect(callbacks.size).toBe(0);
++  expect(resize).toHaveBeenCalledOnce();
++});
 diff --git a/src/__tests__/chart-settings-dialog.test.tsx b/src/__tests__/chart-settings-dialog.test.tsx
 new file mode 100644
 index 0000000..9151d2f
@@ -3180,10 +3214,10 @@ index dca48eb..50d9ac3 100644
 +  return preview ?? prefs;
  }
 diff --git a/src/index.ts b/src/index.ts
-index 5c9f2c5..dc34580 100644
+index 5c9f2c5..e7d383a 100644
 --- a/src/index.ts
 +++ b/src/index.ts
-@@ -19,3 +19,18 @@ export * from "./terminal/index.ts";
+@@ -19,3 +19,20 @@ export * from "./terminal/index.ts";
  export type { OpenChartsProviderProps } from "./adapter/provider.tsx";
  export { onNotification, type Notification } from "./notifications.ts";
  export type { Candle, Order, Position, Symbol, PlaceOrderInput } from "./services/schemas.ts";
@@ -3202,6 +3236,8 @@ index 5c9f2c5..dc34580 100644
 +export type { DrawingToolDefinition, DrawingToolGroup } from './pages/trading/drawingToolCatalog.tsx';
 +export type { IndicatorType } from './lib/indicators.ts';
 +export { sma, ema, rsi, macd, bollingerBands, atr, stochastic, vwap } from './lib/indicators.ts';
++
++export { observeChartSize } from "./lib/chart-resize.ts";
 diff --git a/src/lib/chart-plugins/drawing-tools/drawings-primitive.ts b/src/lib/chart-plugins/drawing-tools/drawings-primitive.ts
 index aaf4198..afdb8d7 100644
 --- a/src/lib/chart-plugins/drawing-tools/drawings-primitive.ts
@@ -4581,6 +4617,34 @@ index dc48f04..de77d13 100644
    | { kind: "body" };
  
  export interface Hit {
+diff --git a/src/lib/chart-resize.ts b/src/lib/chart-resize.ts
+new file mode 100644
+index 0000000..4999eb1
+--- /dev/null
++++ b/src/lib/chart-resize.ts
+@@ -0,0 +1,22 @@
++/** Defer chart layout writes until after ResizeObserver delivery and coalesce bursts. */
++export function observeChartSize(target: HTMLElement, resize: (width: number, height: number) => void): () => void {
++  let frame: number | null = null;
++  let latest: { width: number; height: number } | null = null;
++  let disposed = false;
++  const observer = new ResizeObserver(entries => {
++    const entry = entries.find(item => item.target === target);
++    if (!entry || disposed) return;
++    latest = { width: entry.contentRect.width, height: entry.contentRect.height };
++    if (frame !== null) return;
++    frame = requestAnimationFrame(() => {
++      frame = null;
++      if (!disposed && latest) resize(latest.width, latest.height);
++    });
++  });
++  observer.observe(target);
++  return () => {
++    disposed = true;
++    observer.disconnect();
++    if (frame !== null) cancelAnimationFrame(frame);
++  };
++}
 diff --git a/src/pages/trading/ChartContextMenu.tsx b/src/pages/trading/ChartContextMenu.tsx
 index 2ff483f..c22d52f 100644
 --- a/src/pages/trading/ChartContextMenu.tsx
@@ -4634,7 +4698,7 @@ index 2ff483f..c22d52f 100644
    );
  }
 diff --git a/src/pages/trading/ChartPanel.tsx b/src/pages/trading/ChartPanel.tsx
-index 8de4807..ee3ad50 100644
+index 8de4807..fb6e42f 100644
 --- a/src/pages/trading/ChartPanel.tsx
 +++ b/src/pages/trading/ChartPanel.tsx
 @@ -1,7 +1,7 @@
@@ -4646,7 +4710,15 @@ index 8de4807..ee3ad50 100644
    CrosshairMode,
    createChart,
    type HistogramData,
-@@ -52,6 +52,12 @@ import {
+@@ -26,6 +26,7 @@ import {
+   useState,
+ } from "react";
+ import { useChartPreferences } from "../../hooks/useChartPreferences.ts";
++import { observeChartSize } from "../../lib/chart-resize.ts";
+ import { BandsIndicator } from "../../lib/chart-plugins/bands-indicator/bands-indicator.ts";
+ import { DeltaTooltipPrimitive } from "../../lib/chart-plugins/delta-tooltip/delta-tooltip.ts";
+ import {
+@@ -52,6 +53,12 @@ import {
    TF_INTERVAL_MS,
    type Timeframe,
  } from "./constants.ts";
@@ -4659,7 +4731,7 @@ index 8de4807..ee3ad50 100644
  import { ChartContextMenu } from "./ChartContextMenu.tsx";
  import { ChartSettingsDialog } from "./ChartSettingsDialog.tsx";
  import {
-@@ -75,6 +81,8 @@ import {
+@@ -75,6 +82,8 @@ import {
    toUnixSeconds,
  } from "./utils.ts";
  
@@ -4668,7 +4740,7 @@ index 8de4807..ee3ad50 100644
  // ── Staleness recovery ─────────────────────────────────────────────────────
  // Shared by the live-candle and tick-smoothing effects so either path can
  // trigger a REST refetch when the chart falls more than 1.5 intervals behind
-@@ -269,6 +277,16 @@ export interface ChartPanelProps {
+@@ -269,6 +278,16 @@ export interface ChartPanelProps {
     * staleness watchdog must not treat the old last-bar as a data gap.
     */
    isReplaying?: boolean;
@@ -4685,7 +4757,7 @@ index 8de4807..ee3ad50 100644
  }
  
  // ── Chart plugin overlays ─────────────────────────────────────────────────────
-@@ -319,6 +337,93 @@ function buildPlugin(id: string, ctx: PluginBuildCtx): ISeriesPrimitive<Time> |
+@@ -319,6 +338,93 @@ function buildPlugin(id: string, ctx: PluginBuildCtx): ISeriesPrimitive<Time> |
    return PLUGIN_FACTORIES[id]?.(ctx) ?? null;
  }
  
@@ -4779,7 +4851,7 @@ index 8de4807..ee3ad50 100644
  // Shared OHLCV legend shape — derive the percent change once at the call site
  // so the crosshair, candle, and tick paths all produce identical legend objects.
  interface OhlcvLegend {
-@@ -328,11 +433,12 @@ interface OhlcvLegend {
+@@ -328,11 +434,12 @@ interface OhlcvLegend {
    c: number;
    v: number;
    change: number;
@@ -4793,7 +4865,7 @@ index 8de4807..ee3ad50 100644
  }
  
  // ── Real-time series update helpers ──────────────────────────────────────────
-@@ -356,6 +462,16 @@ interface RtCtx {
+@@ -356,6 +463,16 @@ interface RtCtx {
    series: ISeriesApi<"Candlestick">;
    volume: ISeriesApi<"Histogram"> | null;
    lastCandle: Ref<CandlestickData<Time> | null>;
@@ -4810,7 +4882,7 @@ index 8de4807..ee3ad50 100644
    liveCandleTs: Ref<number>;
    legendVol: Ref<number>;
    gapAt: Ref<number>;
-@@ -369,6 +485,22 @@ interface RtCtx {
+@@ -369,6 +486,22 @@ interface RtCtx {
    setLegend: Dispatch<SetStateAction<OhlcvLegend | null>>;
  }
  
@@ -4833,7 +4905,7 @@ index 8de4807..ee3ad50 100644
  function intervalSecOf(tf: Timeframe): number {
    return (TF_INTERVAL_MS[tf] ?? 60_000) / 1000;
  }
-@@ -392,16 +524,19 @@ function paintServerVolume(live: LiveCandleData, barTime: Time, ctx: RtCtx): voi
+@@ -392,16 +525,19 @@ function paintServerVolume(live: LiveCandleData, barTime: Time, ctx: RtCtx): voi
  function applyServerCandle(live: LiveCandleData, ctx: RtCtx): void {
    const ts = toUnixSeconds(live.timestamp);
    if (Number.isNaN(ts) || ts <= 0 || !ctx.lastCandle.current) return;
@@ -4856,7 +4928,7 @@ index 8de4807..ee3ad50 100644
    ctx.lastCandle.current = bar;
    ctx.liveCandleTs.current = toUnixMs(live.timestamp);
    try {
-@@ -475,8 +610,10 @@ function applyTick(tick: TickData, ctx: RtCtx): void {
+@@ -475,8 +611,10 @@ function applyTick(tick: TickData, ctx: RtCtx): void {
    const mid = (tick.bid + tick.ask) / 2;
    const bucketTime = getCandleBucketTime(tickMs, ctx.timeframe) as Time;
    const isContinuation = prev.time === bucketTime;
@@ -4869,7 +4941,7 @@ index 8de4807..ee3ad50 100644
    ctx.lastCandle.current = bar;
    try {
      ctx.series.update(bar);
-@@ -627,14 +764,20 @@ function scrollOrFit(chart: IChartApi | null, barCount: number): void {
+@@ -627,14 +765,20 @@ function scrollOrFit(chart: IChartApi | null, barCount: number): void {
  // Re-apply the latest live bar after a periodic refetch (viewport preserved).
  function reapplyLive(live: LiveCandleData | undefined, ctx: RtCtx): void {
    if (!live) return;
@@ -4892,7 +4964,7 @@ index 8de4807..ee3ad50 100644
  }
  
  // Replay the buffered live candle immediately after history is painted so the
-@@ -650,10 +793,17 @@ function replayBufferedLive(
+@@ -650,10 +794,17 @@ function replayBufferedLive(
    if (Number.isNaN(liveTs) || liveTs <= 0 || liveTs < lastHistBarSec) return;
    const liveBar = liveBarFrom(buffered);
    if (!liveBar) return;
@@ -4912,7 +4984,7 @@ index 8de4807..ee3ad50 100644
    } catch {
      /* safe to ignore — timestamp may be older than series */
    }
-@@ -871,23 +1021,21 @@ function OhlcvCell({
+@@ -871,23 +1022,21 @@ function OhlcvCell({
    label,
    value,
    digits,
@@ -4940,7 +5012,7 @@ index 8de4807..ee3ad50 100644
        >
          {value.toFixed(digits)}
        </span>
-@@ -895,21 +1043,33 @@ function OhlcvCell({
+@@ -895,21 +1044,33 @@ function OhlcvCell({
    );
  }
  
@@ -4987,7 +5059,7 @@ index 8de4807..ee3ad50 100644
          <>
            <span className="text-muted-foreground/70">V</span>
            <span className="text-foreground/60">{legend.v.toLocaleString()}</span>
-@@ -922,7 +1082,7 @@ function OhlcvLegendRow({ legend, pipDigits }: { legend: OhlcvLegend; pipDigits:
+@@ -922,7 +1083,7 @@ function OhlcvLegendRow({ legend, pipDigits }: { legend: OhlcvLegend; pipDigits:
  function BidAskRow({ tick, pipDigits }: { tick: TickData; pipDigits: number }) {
    const spread = ((tick.ask - tick.bid) * 10 ** pipDigits).toFixed(1);
    return (
@@ -4996,7 +5068,7 @@ index 8de4807..ee3ad50 100644
        <span className="text-muted-foreground/50">Bid</span>
        <span className="text-[#0ecb81]/80">{tick.bid.toFixed(pipDigits)}</span>
        <span className="text-muted-foreground/50">Ask</span>
-@@ -935,7 +1095,7 @@ function BidAskRow({ tick, pipDigits }: { tick: TickData; pipDigits: number }) {
+@@ -935,7 +1096,7 @@ function BidAskRow({ tick, pipDigits }: { tick: TickData; pipDigits: number }) {
  
  // Symbol / timeframe / OHLCV / countdown header in the chart's top-left corner.
  // Extracted so the visibility branching doesn't inflate ChartPanel's CC.
@@ -5005,7 +5077,7 @@ index 8de4807..ee3ad50 100644
    selectedSymbol,
    timeframe,
    legend,
-@@ -944,6 +1104,11 @@ function ChartLegendHeader({
+@@ -944,6 +1105,11 @@ function ChartLegendHeader({
    pipDigits,
    showOhlcLegend,
    showCountdown,
@@ -5017,7 +5089,7 @@ index 8de4807..ee3ad50 100644
  }: {
    selectedSymbol: string;
    timeframe: Timeframe;
-@@ -953,15 +1118,34 @@ function ChartLegendHeader({
+@@ -953,15 +1119,34 @@ function ChartLegendHeader({
    pipDigits: number;
    showOhlcLegend: boolean;
    showCountdown: boolean;
@@ -5058,7 +5130,7 @@ index 8de4807..ee3ad50 100644
          {countdown && showCountdown && (
            <span className="text-muted-foreground/60 flex items-center gap-0.5">
              <Clock className="h-2.5 w-2.5 opacity-50" />
-@@ -979,8 +1163,11 @@ function ChartLegendHeader({
+@@ -979,8 +1164,11 @@ function ChartLegendHeader({
  // Extracted so the selection branching doesn't inflate ChartPanel's CC.
  function DrawingOverlays({
    drawing,
@@ -5070,7 +5142,7 @@ index 8de4807..ee3ad50 100644
    onUpdate,
    onClone,
    onRemove,
-@@ -988,8 +1175,11 @@ function DrawingOverlays({
+@@ -988,8 +1176,11 @@ function DrawingOverlays({
    onCloseSettings,
  }: {
    drawing: DrawingLine | null;
@@ -5082,7 +5154,7 @@ index 8de4807..ee3ad50 100644
    onUpdate: (d: DrawingLine) => void;
    onClone: () => void;
    onRemove: () => void;
-@@ -1002,15 +1192,18 @@ function DrawingOverlays({
+@@ -1002,15 +1193,18 @@ function DrawingOverlays({
        <DrawingSettingsDialog
          drawing={drawing}
          currentTf={currentTf}
@@ -5103,7 +5175,7 @@ index 8de4807..ee3ad50 100644
        onUpdate={onUpdate}
        onClone={onClone}
        onRemove={onRemove}
-@@ -1112,6 +1305,14 @@ export function ChartPanel({
+@@ -1112,6 +1306,14 @@ export function ChartPanel({
    onClearDrawings,
    onClearIndicators,
    isReplaying = false,
@@ -5118,7 +5190,7 @@ index 8de4807..ee3ad50 100644
  }: ChartPanelProps) {
    const queryClient = useQueryClient();
    const lastGapRefetchAtRef = useRef<number>(0);
-@@ -1160,20 +1361,39 @@ export function ChartPanel({
+@@ -1160,20 +1362,39 @@ export function ChartPanel({
    const [countdown, setCountdown] = useState("");
    const countdownIntervalMs = TF_INTERVAL_MS[timeframe];
    const countdownText =
@@ -5161,7 +5233,7 @@ index 8de4807..ee3ad50 100644
  
    // Scroll-loaded history is tagged with the view it belongs to, so a symbol
    // or timeframe change drops it during render rather than from a reset effect
-@@ -1198,6 +1418,10 @@ export function ChartPanel({
+@@ -1198,6 +1419,10 @@ export function ChartPanel({
    // ── Drawing selection (floating toolbar / settings dialog / object tree) ──
    const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([]);
    const [showDrawingSettings, setShowDrawingSettings] = useState(false);
@@ -5172,7 +5244,7 @@ index 8de4807..ee3ad50 100644
    const [showObjectTree, setShowObjectTree] = useState(false);
    const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
  
-@@ -1222,10 +1446,56 @@ export function ChartPanel({
+@@ -1222,10 +1447,56 @@ export function ChartPanel({
    // Drawings actually shown on this chart: not hidden, and either visible on
    // all timeframes or scoped to the current one.
    const visibleDrawings = useMemo(
@@ -5230,7 +5302,7 @@ index 8de4807..ee3ad50 100644
    // Stable refs so the chart-create effect doesn't re-run on every parent render
    // when these props are unstable (e.g. inline onAddDrawing).
    const drawingToolRef = useRef(drawingTool);
-@@ -1289,6 +1559,9 @@ export function ChartPanel({
+@@ -1289,6 +1560,9 @@ export function ChartPanel({
        id: crypto.randomUUID(),
        time: d.time != null ? d.time + offsetSec : undefined,
        time2: d.time2 != null ? d.time2 + offsetSec : undefined,
@@ -5240,7 +5312,7 @@ index 8de4807..ee3ad50 100644
      });
    }, [selectedDrawing, timeframe, onAddDrawing]);
  
-@@ -1318,7 +1591,23 @@ export function ChartPanel({
+@@ -1318,7 +1592,23 @@ export function ChartPanel({
        historicalExtra.view === `${selectedSymbol}:${timeframe}` ? historicalExtra.bars : [];
      return extra.length === 0 ? candles : [...extra, ...candles];
    }, [historicalExtra, candles, selectedSymbol, timeframe]);
@@ -5265,7 +5337,7 @@ index 8de4807..ee3ad50 100644
  
    const {
      newsConfig,
-@@ -1462,100 +1751,23 @@ export function ChartPanel({
+@@ -1462,100 +1752,23 @@ export function ChartPanel({
    useEffect(() => {
      if (!containerRef.current) return;
  
@@ -5373,7 +5445,25 @@ index 8de4807..ee3ad50 100644
        priceLineWidth: 1,
        priceLineColor: "",
        priceLineStyle: LineStyle.Dotted,
-@@ -1661,8 +1873,10 @@ export function ChartPanel({
+@@ -1587,15 +1800,9 @@ export function ChartPanel({
+     });
+
+     // Handle resize
+-    const ro = new ResizeObserver((entries) => {
+-      for (const entry of entries) {
+-        chart.applyOptions({
+-          width: entry.contentRect.width,
+-          height: entry.contentRect.height,
+-        });
+-      }
++    const stopObservingSize = observeChartSize(containerRef.current, (width, height) => {
++      chart.applyOptions({ width, height });
+     });
+-    ro.observe(containerRef.current);
+
+     // Interactive drawing layer (place / preview / select / drag / delete) —
+     // callbacks go through refs so the create-effect doesn't depend on them.
+@@ -1661,11 +1868,13 @@ export function ChartPanel({
  
      // Signal listener-binding hooks that a live chart instance now exists.
      setChartEpoch((e) => e + 1);
@@ -5383,8 +5473,12 @@ index 8de4807..ee3ad50 100644
 +      onChartReady?.(null);
        historyLoadCancelled = true;
        chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleRangeChange);
-       ro.disconnect();
-@@ -1695,82 +1909,37 @@ export function ChartPanel({
+-      ro.disconnect();
++      stopObservingSize();
+       drawingManager.destroy();
+       drawingManagerRef.current = null;
+       setSelectedDrawingIds([]);
+@@ -1695,82 +1904,37 @@ export function ChartPanel({
    }, [
      isDark,
      pipDigits,
@@ -5483,7 +5577,7 @@ index 8de4807..ee3ad50 100644
      drawingManagerRef.current?.updateTimeframe(
        timeframe,
        (TF_INTERVAL_MS[timeframe] ?? 60_000) / 1000,
-@@ -1779,6 +1948,7 @@ export function ChartPanel({
+@@ -1779,6 +1943,7 @@ export function ChartPanel({
  
    // ── Refs for smooth real-time streaming ────────────────
    const lastCandleRef = useRef<CandlestickData<Time> | null>(null);
@@ -5491,7 +5585,7 @@ index 8de4807..ee3ad50 100644
    const lastLoadKeyRef = useRef<string>("");
    const latestLiveCandleRef = useRef<typeof liveCandle | undefined>(undefined);
    // Authoritative server candle timestamp, normalised to unix MILLISECONDS —
-@@ -1800,6 +1970,9 @@ export function ChartPanel({
+@@ -1800,6 +1965,9 @@ export function ChartPanel({
        series,
        volume: volumeSeriesRef.current,
        lastCandle: lastCandleRef,
@@ -5501,7 +5595,7 @@ index 8de4807..ee3ad50 100644
        liveCandleTs: liveCandleTsRef,
        legendVol: legendVolRef,
        gapAt: lastGapRefetchAtRef,
-@@ -1812,7 +1985,19 @@ export function ChartPanel({
+@@ -1812,7 +1980,19 @@ export function ChartPanel({
        qc: queryClient,
        setLegend,
      }),
@@ -5522,7 +5616,7 @@ index 8de4807..ee3ad50 100644
    );
  
    // Keep latest live candle in a ref (avoids stale closure in setData effect)
-@@ -1836,6 +2021,10 @@ export function ChartPanel({
+@@ -1836,6 +2016,10 @@ export function ChartPanel({
      // sync around it would buy nothing but risk.
      // eslint-disable-next-line react-hooks/immutability
      lastCandleRef.current = chartData[chartData.length - 1] ?? null;
@@ -5533,7 +5627,7 @@ index 8de4807..ee3ad50 100644
      setLegend(legendFromSeries(chartData, volumeData));
  
      const buffered = latestLiveCandleRef.current;
-@@ -1990,6 +2179,11 @@ export function ChartPanel({
+@@ -1990,6 +2174,11 @@ export function ChartPanel({
          pipDigits={pipDigits}
          showOhlcLegend={chartPrefs.showOhlcLegend}
          showCountdown={chartPrefs.showCountdown}
@@ -5545,7 +5639,7 @@ index 8de4807..ee3ad50 100644
        />
  
        {/* Drag-to-edit tooltip */}
-@@ -2019,8 +2213,17 @@ export function ChartPanel({
+@@ -2019,8 +2208,17 @@ export function ChartPanel({
        {/* Selected-drawing floating toolbar / settings dialog */}
        <DrawingOverlays
          drawing={selectedDrawing}
@@ -5563,7 +5657,7 @@ index 8de4807..ee3ad50 100644
          onUpdate={(d) => onUpdateDrawing?.(d)}
          onClone={handleCloneDrawing}
          onRemove={() => selectedDrawing && onRemoveDrawing?.(selectedDrawing.id)}
-@@ -2062,7 +2265,7 @@ export function ChartPanel({
+@@ -2062,7 +2260,7 @@ export function ChartPanel({
        />
  
        {/* News overlay (popup, config dialog, button) */}
@@ -5572,7 +5666,7 @@ index 8de4807..ee3ad50 100644
          newsConfig={newsConfig}
          setNewsConfig={setNewsConfig}
          showNewsConfigDialog={showNewsConfigDialog}
-@@ -2072,7 +2275,7 @@ export function ChartPanel({
+@@ -2072,7 +2270,7 @@ export function ChartPanel({
          isDark={isDark}
          pipDigits={pipDigits}
          containerRef={containerRef}
@@ -5581,7 +5675,7 @@ index 8de4807..ee3ad50 100644
  
        {/* Chart-wide right-click menu (TradingView-style) */}
        {chartMenu && (
-@@ -2112,7 +2315,7 @@ export function ChartPanel({
+@@ -2112,7 +2310,7 @@ export function ChartPanel({
        <div ref={containerRef} className="w-full h-full" onContextMenu={handleChartContextMenu} />
  
        {/* Left vertical tool rail (TradingView-style grouped flyouts) */}

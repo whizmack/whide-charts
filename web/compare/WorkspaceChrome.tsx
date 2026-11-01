@@ -82,6 +82,14 @@ export function IndicatorToolbarButton({expanded,onToggle,buttonRef}:{expanded:b
  return <button ref={buttonRef} className="toolbar-action alignment-control" aria-label="Indicators" title="Indicators" aria-expanded={expanded} onClick={onToggle}><BarChartIcon/>Indicators</button>
 }
 
+export function ChartLayoutButton({open,onToggle,buttonRef,className=''}:{open:boolean;onToggle:()=>void;buttonRef?:Ref<HTMLButtonElement>;className?:string}):ReactElement{
+ return <button ref={buttonRef} className={`alignment-icon-control ${className}`} aria-label="Chart layout" title="Chart layout" aria-expanded={open} onClick={onToggle}><DashboardIcon/></button>
+}
+
+export function layoutMenuLeft(triggerLeft:number,menuWidth:number,viewportWidth:number):number{
+ return Math.max(8,Math.min(triggerLeft,viewportWidth-menuWidth-8))
+}
+
 const PAIRS:Symbol[]=['BTCUSDT','ETHUSDT','SOLUSDT']
 const PAIR_NAMES:Record<Symbol,string>={BTCUSDT:'Bitcoin / TetherUS',ETHUSDT:'Ethereum / TetherUS',SOLUSDT:'Solana / TetherUS'}
 
@@ -282,7 +290,7 @@ export function WorkspaceUtilityRail({watchlistOpen,layoutOpen,layoutButtonRef,o
  function openAbout(){setSettingsOpen(false);settingsButton.current?.focus();onOpenAbout()}
  return <nav ref={rail} className="workspace-utility-rail" aria-label="Workspace utilities">
   <button className="alignment-icon-control" aria-label="Watchlist" title="Watchlist" aria-pressed={watchlistOpen} onClick={onToggleWatchlist}><RowsIcon/></button>
-  <button ref={layoutButtonRef} className="alignment-icon-control" aria-label="Chart layout" title="Chart layout" aria-expanded={layoutOpen} onClick={onToggleLayout}><DashboardIcon/></button>
+  <ChartLayoutButton buttonRef={layoutButtonRef} className="layout-trigger-compact" open={layoutOpen} onToggle={onToggleLayout}/>
   <button ref={settingsButton} className="alignment-icon-control" aria-label="Settings" title="Settings" aria-haspopup="menu" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(value=>!value)}><GearIcon/></button>
   <button className="alignment-icon-control" aria-label="Export workspace backup" title="Export workspace backup" onClick={onExport}><DownloadIcon/></button>
   <WorkspaceSettingsMenu open={settingsOpen} onOpenChartSettings={openChartSettings} onOpenAbout={openAbout} onClose={()=>{setSettingsOpen(false);settingsButton.current?.focus()}}/>

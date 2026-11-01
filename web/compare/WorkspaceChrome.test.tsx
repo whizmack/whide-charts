@@ -3,6 +3,8 @@ import {renderToStaticMarkup} from 'react-dom/server'
 import {describe,expect,it,vi} from 'vitest'
 import {
  ActiveChartMaximizeButton,
+ ChartLayoutButton,
+ layoutMenuLeft,
  CellCaption,
  createWorkspaceBackup,
  IndicatorToolbarButton,
@@ -94,7 +96,10 @@ describe('workspace utility rail',()=>{
   expect(restore).toContain('title="Restore chart layout"')
  })
 
- it('exposes only working workspace actions with their open states',()=>{
+ it('provides chart layout controls for desktop and compact workspaces',()=>{
+  const layout=renderToStaticMarkup(createElement(ChartLayoutButton,{open:true,onToggle:noop}))
+  expect(layout).toContain('aria-label="Chart layout"')
+  expect(layout).toContain('aria-expanded="true"')
   const markup=renderToStaticMarkup(createElement(WorkspaceUtilityRail,{
    watchlistOpen:true,
    layoutOpen:true,
@@ -105,16 +110,21 @@ describe('workspace utility rail',()=>{
    onExport:noop,
   }))
   expect(markup).toContain('aria-label="Watchlist"')
-  expect(markup.match(/class="alignment-icon-control"/g)).toHaveLength(4)
+  expect(markup.match(/class="alignment-icon-control"/g)).toHaveLength(3)
   expect(markup).toContain('title="Watchlist"')
   expect(markup).toContain('aria-pressed="true"')
+  expect(markup).toContain('layout-trigger-compact')
   expect(markup).toContain('aria-label="Chart layout"')
-  expect(markup).toContain('title="Chart layout"')
-  expect(markup).toContain('aria-expanded="true"')
   expect(markup).toContain('aria-label="Settings"')
   expect(markup).toContain('title="Settings"')
   expect(markup).toContain('aria-label="Export workspace backup"')
   expect(markup).toContain('title="Export workspace backup"')
+ })
+
+ it('anchors the layout menu to its toolbar button while keeping it onscreen',()=>{
+  expect(layoutMenuLeft(520,430,1280)).toBe(520)
+  expect(layoutMenuLeft(1100,430,1280)).toBe(842)
+  expect(layoutMenuLeft(-20,430,1280)).toBe(8)
  })
 })
 

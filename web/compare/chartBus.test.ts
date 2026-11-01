@@ -1,13 +1,18 @@
 import {expect,it} from 'vitest'
 import {ChartBus,type ChartPort} from './chartBus'
 import type {LogicalRange,Time,MouseEventParams,IChartApi} from 'lightweight-charts'
-function port(id:string,cell:string,times:number[],width:number,scaleWidth=0){
+function port(id:string,cell:string,times:number[],width:number,scaleWidth=0,side:'left'|'right'='right'){
  let range={from:0,to:2} as LogicalRange,visibleTimeRange:{from:number;to:number}|null=null;const ranges=new Set<(r:LogicalRange|null)=>void>(),cross=new Set<(p:MouseEventParams<Time>)=>void>();let marker:unknown=null,minimumWidth=0,horz=true
  const ts={getVisibleLogicalRange:()=>range,setVisibleLogicalRange:(r:LogicalRange)=>{range=r;for(const fn of ranges)fn(r)},setVisibleRange:(r:{from:number;to:number})=>{visibleTimeRange=r},subscribeVisibleLogicalRangeChange:(fn:typeof ranges extends Set<infer F>?F:never)=>ranges.add(fn),unsubscribeVisibleLogicalRangeChange:(fn:typeof ranges extends Set<infer F>?F:never)=>ranges.delete(fn)}
- const chart={timeScale:()=>ts,subscribeCrosshairMove:(fn:typeof cross extends Set<infer F>?F:never)=>cross.add(fn),unsubscribeCrosshairMove:(fn:typeof cross extends Set<infer F>?F:never)=>cross.delete(fn),setCrosshairPosition:(value:number,time:number)=>{marker={value,time}},clearCrosshairPosition:()=>{marker=null},applyOptions:(o:{crosshair?:{horzLine?:{visible?:boolean}}})=>{if(typeof o.crosshair?.horzLine?.visible==='boolean')horz=o.crosshair.horzLine.visible},priceScale:()=>({width:()=>Math.max(scaleWidth,minimumWidth),options:()=>({minimumWidth}),applyOptions:(o:{minimumWidth?:number})=>{if(typeof o.minimumWidth==='number')minimumWidth=o.minimumWidth}})}
+ const chart={timeScale:()=>ts,subscribeCrosshairMove:(fn:typeof cross extends Set<infer F>?F:never)=>cross.add(fn),unsubscribeCrosshairMove:(fn:typeof cross extends Set<infer F>?F:never)=>cross.delete(fn),setCrosshairPosition:(value:number,time:number)=>{marker={value,time}},clearCrosshairPosition:()=>{marker=null},applyOptions:(o:{crosshair?:{horzLine?:{visible?:boolean}}})=>{if(typeof o.crosshair?.horzLine?.visible==='boolean')horz=o.crosshair.horzLine.visible},priceScale:(scaleSide:string)=>({width:()=>{if(scaleSide!==side)throw new Error('Value is null');return Math.max(scaleWidth,minimumWidth)},options:()=>({minimumWidth,visible:scaleSide===side}),applyOptions:(o:{minimumWidth?:number})=>{if(typeof o.minimumWidth==='number')minimumWidth=o.minimumWidth}})}
  const emit=(p:MouseEventParams<Time>)=>{for(const fn of cross)fn(p)}
  return {p:{id,cell,chart:chart as unknown as IChartApi,series:{} as ChartPort['series'],times,width,values:new Map(times.map((t,i)=>[t,10+i]))},move:(r:LogicalRange)=>ts.setVisibleLogicalRange(r),hover:(time:number)=>emit({time,point:{x:1,y:1},sourceEvent:{}} as MouseEventParams<Time>),echo:(time:number)=>emit({time,point:{x:1,y:1}} as MouseEventParams<Time>),leave:()=>emit({} as MouseEventParams<Time>),range:()=>range,visibleTimeRange:()=>visibleTimeRange,marker:()=>marker,scale:()=>minimumWidth,horz:()=>horz,subscriptions:()=>ranges.size+cross.size}
 }
+it('aligns visible left price scales without querying a missing right axis',()=>{
+ const bus=new ChartBus(),price=port('a:price','a',[0,300],300,96,'left'),rsi=port('a:rsi','a',[0,300],300,48,'left')
+ expect(()=>{bus.add(price.p);bus.add(rsi.p)}).not.toThrow()
+ expect(price.scale()).toBe(96);expect(rsi.scale()).toBe(96)
+})
 it('sets the active chart to a selected UTC date range using bar timestamps',()=>{
  const bus=new ChartBus(),chart=port('chart-1:price','chart-1',[0,300,600],300)
  bus.add(chart.p)

@@ -1,10 +1,10 @@
 import {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState,type ComponentProps} from 'react'
-import {ChartPanel,CHART_COLORS,buildChartSettingsOptions,useChartPreferences,type IndicatorType} from '@dylanpersonguy/opencharts'
+import {ChartPanel,CHART_COLORS,buildChartSettingsOptions,observeChartSize,useChartPreferences,type IndicatorType} from '@dylanpersonguy/opencharts'
 import {createChart,CrosshairMode,LineStyle,type IChartApi,type ISeriesApi,type UTCTimestamp,type MouseEventParams,type Time} from 'lightweight-charts'
 import {GearIcon,Cross2Icon,ArrowUpIcon,ArrowDownIcon} from '@radix-ui/react-icons'
 import type {Bar} from '../api'
 import {MINUTES,type Timeframe} from '../replay'
-import {ChartBus,type ChartPort} from './chartBus'
+import {ChartBus,safePriceScaleWidth,type ChartPort} from './chartBus'
 import {AxisContextMenu,type AxisMenuState} from './AxisContextMenu'
 import {barCloseCountdown,defaultStudy,isOscillator,lastCandleBodyColor,lastPriceBadgePlacement,nonOverlappingPriceLabelTop,normalizeStudy,priceBadgeTextColor,type SettingsMap,type StudySettings} from './studies'
 import {studyData} from './studyData'
@@ -83,16 +83,17 @@ export function StudyWorkspace({cell,bars,bus,settings,active,onSettings,onEdit,
  function pane(type:IndicatorType){return <OscillatorPane renderedHeight={total?Math.max(72,Math.round(resolved[type].height*budget/total)):170} key={type} cell={cell} type={type} bars={bars} settings={resolved[type]} bus={bus} timeframe={panel.timeframe as Timeframe} bottom={last===type} onSettings={v=>onSettings(type,v)} onEdit={()=>onEdit(type)} onRemove={()=>onRemove(type)}/>}
  return <div ref={workspace} className="study-workspace">
   {above.map(pane)}
-  <div className="price-pane" key="price"><ChartPanel {...panel} drawingRailHost={drawingRailHost} activeIndicators={emptyIndicators} onChartReady={ready}/>
-   <BarCloseCountdown timeframe={panel.timeframe as Timeframe} chart={main?.chart??null} series={main?.series??null} otherSeries={overlaySeries} last={bars.at(-1)} previous={bars.at(-2)}/>
+  <div className={`price-pane axis-${prefs.showPriceScale?prefs.priceScaleSide:'none'}`} key="price"><ChartPanel {...panel} drawingRailHost={drawingRailHost} activeIndicators={emptyIndicators} onChartReady={ready}/>
+   <BarCloseCountdown isReplaying={Boolean(panel.isReplaying)} timeframe={panel.timeframe as Timeframe} chart={main?.chart??null} series={main?.series??null} otherSeries={overlaySeries} last={bars.at(-1)} previous={bars.at(-2)}/>
    <div className="overlay-legends">{overlays.map(t=><StudyLegend key={t} type={t} settings={resolved[t]} values={computed[t].lines.map(l=>hoverTime===null?l.data.at(-1)?.value:l.data.find(p=>p.time===hoverTime)?.value)} showTitle={prefs.showStatusLineStudyTitle} showInputs={prefs.showStatusLineStudyInputs&&resolved[t].showStatusLineInputs} showValues={prefs.showStatusLineStudyValues&&resolved[t].showStatusLineValues} showBackground={prefs.showStatusLineStudyBackground} onEdit={()=>onEdit(t)} onRemove={()=>onRemove(t)}/>)}</div>
   </div>
   {below.map(pane)}
   {axisMenu&&main?<AxisContextMenu key={axisMenu.id} menu={axisMenu} chart={main.chart} prefs={prefs} onOpenSettings={onOpenSettings} onClose={closeAxisMenu}/>:null}
  </div>
 }
-function BarCloseCountdown({timeframe,chart,series,otherSeries,last,previous}:{timeframe:Timeframe;chart:IChartApi|null;series:ISeriesApi<'Candlestick'>|null;otherSeries:{current:ISeriesApi<'Line'>[]};last:Bar|undefined;previous:Bar|undefined}){
+export function BarCloseCountdown({timeframe,chart,series,otherSeries,last,previous,isReplaying}:{timeframe:Timeframe;chart:IChartApi|null;series:ISeriesApi<'Candlestick'>|null;otherSeries:{current:ISeriesApi<'Line'>[]};last:Bar|undefined;previous:Bar|undefined;isReplaying:boolean}){
  const prefs=useChartPreferences()
+ const showCountdown=prefs.showCountdown&&!isReplaying
  const [countdown,setCountdown]=useState(''),[relocatedLabels,setRelocatedLabels]=useState<RelocatedAxisLabel[]>([]),badge=useRef<HTMLDivElement>(null)
  const hiddenOtherLabels=useRef(new Map<ISeriesApi<'Line'>,boolean>())
  const lastRef=useRef(last);lastRef.current=last
@@ -104,18 +105,18 @@ function BarCloseCountdown({timeframe,chart,series,otherSeries,last,previous}:{t
   hiddenOtherLabels.current.clear()
  }
  useEffect(()=>{
-  if(!prefs.showCountdown){setCountdown('');return}
+  if(!showCountdown){setCountdown('');return}
   const tick=()=>setCountdown(barCloseCountdown(Date.now(),timeframe))
   tick();const id=setInterval(tick,1000)
   return()=>clearInterval(id)
- },[prefs.showCountdown,timeframe])
+ },[showCountdown,timeframe])
  useEffect(()=>{
   if(!series)return
-  try{series.applyOptions({lastValueVisible:prefs.showLastValue&&!prefs.showCountdown})}catch{/* The chart is being disposed. */}
+  try{series.applyOptions({lastValueVisible:prefs.showLastValue&&!showCountdown})}catch{/* The chart is being disposed. */}
   return()=>{try{series.applyOptions({lastValueVisible:prefs.showLastValue})}catch{/* The chart is being disposed. */}}
- },[series,prefs.showLastValue,prefs.showCountdown])
+ },[series,prefs.showLastValue,showCountdown])
  useEffect(()=>{
-  if(!prefs.showCountdown||!prefs.showPriceScale||!chart||!series||!lastRef.current)return
+  if(!showCountdown||!prefs.showPriceScale||!chart||!series||!lastRef.current)return
   let frame=0,cancelled=false
   const updatePosition=()=>{
    const node=badge.current,bar=lastRef.current
@@ -172,8 +173,8 @@ function BarCloseCountdown({timeframe,chart,series,otherSeries,last,previous}:{t
   }
   frame=requestAnimationFrame(updatePosition)
   return()=>{cancelled=true;cancelAnimationFrame(frame);restoreHiddenLabels()}
- },[prefs.showCountdown,prefs.showPriceScale,prefs.showLastValue,prefs.noOverlappingLabels,prefs.priceScaleSide,chart,series,last?.time])
- if(!prefs.showCountdown||!prefs.showPriceScale||!series||!last)return null
+ },[showCountdown,prefs.showPriceScale,prefs.showLastValue,prefs.noOverlappingLabels,prefs.priceScaleSide,chart,series,last?.time])
+ if(!showCountdown||!prefs.showPriceScale||!series||!last)return null
  const price=series.priceFormatter().format(last.close)
  return <>
   <div ref={badge} className="last-price-badge" role="img" aria-label={prefs.showLastValue?`${price}, ${countdown} remaining`:`${countdown} remaining`}>
@@ -190,12 +191,13 @@ function StudyLegend({type,settings:s,values,showTitle,showInputs,showValues,sho
 function OscillatorPane({renderedHeight,cell,type,bars,settings:s,bus,timeframe,bottom,onSettings,onEdit,onRemove}:{renderedHeight:number;cell:string;type:IndicatorType;bars:Bar[];settings:StudySettings;bus:ChartBus;timeframe:Timeframe;bottom:boolean;onSettings:(v:StudySettings)=>void;onEdit:()=>void;onRemove:()=>void}){
  const host=useRef<HTMLDivElement>(null),chartRef=useRef<IChartApi|null>(null),series=useRef<ISeriesApi<'Line'>[]>([]),hist=useRef<ISeriesApi<'Histogram'>|null>(null),anchor=useRef<ISeriesApi<'Line'>|null>(null),port=useRef<ChartPort|null>(null)
  const [hoverTime,setHoverTime]=useState<number|null>(null)
- const [band,setBand]=useState<{top:number;height:number;right:number}|null>(null)
+ const [band,setBand]=useState<{top:number;height:number;left:number;right:number}|null>(null)
  const prefs=useChartPreferences(),computed=useMemo(()=>studyData(bars,type,s),[bars,type,s])
- const updateBand=useCallback(()=>{const primary=series.current[0],chart=chartRef.current;if((type!=='RSI'&&type!=='STOCH')||!primary||!chart)return;const hi=primary.priceToCoordinate(type==='RSI'?70:80),lo=primary.priceToCoordinate(type==='RSI'?30:20);if(hi!==null&&lo!==null)setBand({top:hi,height:lo-hi,right:chart.priceScale(prefs.priceScaleSide).width()})},[type,prefs.priceScaleSide])
+ const updateBand=useCallback(()=>{const primary=series.current[0],chart=chartRef.current;if((type!=='RSI'&&type!=='STOCH')||!primary||!chart)return;const hi=primary.priceToCoordinate(type==='RSI'?70:80),lo=primary.priceToCoordinate(type==='RSI'?30:20),width=prefs.showPriceScale?safePriceScaleWidth(chart,prefs.priceScaleSide):0;if(hi!==null&&lo!==null&&width!==null)setBand({top:hi,height:lo-hi,left:prefs.priceScaleSide==='left'?width:0,right:prefs.priceScaleSide==='right'?width:0})},[type,prefs.priceScaleSide,prefs.showPriceScale])
+ const updateBandRef=useRef(updateBand);updateBandRef.current=updateBand
  useEffect(()=>{
   if(!host.current)return
- const chart=createChart(host.current,{autoSize:true,...oscillatorChartOptions(prefs,timeframe,bottom)})
+ const chart=createChart(host.current,{...oscillatorChartOptions(prefs,timeframe,bottom),autoSize:false,width:host.current.clientWidth,height:host.current.clientHeight})
   chartRef.current=chart
   anchor.current=chart.addLineSeries({priceScaleId:'anchor',lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false});chart.priceScale('anchor').applyOptions({visible:false})
   if(type==='MACD')hist.current=chart.addHistogramSeries({priceLineVisible:false,lastValueVisible:s.showPriceLabel,visible:s.lineVisible})
@@ -208,15 +210,22 @@ function OscillatorPane({renderedHeight,cell,type,bars,settings:s,bus,timeframe,
   computed.lines.forEach((l,i)=>series.current[i].setData(data(l.data)));hist.current?.setData(data(computed.histogram))
   bus.add(p)
   const hover=(event:MouseEventParams<Time>)=>setHoverTime(event.point&&typeof event.time==='number'?event.time:null);chart.subscribeCrosshairMove(hover)
-  const resize=new ResizeObserver(()=>requestAnimationFrame(updateBand));resize.observe(host.current);chart.timeScale().subscribeVisibleLogicalRangeChange(updateBand)
+  const refreshBand=()=>updateBandRef.current()
+  let bandFrame:number|null=null
+  const stopObservingSize=observeChartSize(host.current,(width,height)=>{
+   chart.resize(width,height)
+   if(bandFrame!==null)cancelAnimationFrame(bandFrame)
+   bandFrame=requestAnimationFrame(()=>{bandFrame=null;refreshBand()})
+  })
+  chart.timeScale().subscribeVisibleLogicalRangeChange(refreshBand)
   updateBand()
-  return()=>{resize.disconnect();bus.remove(p.id);chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateBand);chart.unsubscribeCrosshairMove(hover);chart.remove();chartRef.current=null;series.current=[];hist.current=null;anchor.current=null;port.current=null}
+  return()=>{stopObservingSize();if(bandFrame!==null)cancelAnimationFrame(bandFrame);bus.remove(p.id);chart.timeScale().unsubscribeVisibleLogicalRangeChange(refreshBand);chart.unsubscribeCrosshairMove(hover);chart.remove();chartRef.current=null;series.current=[];hist.current=null;anchor.current=null;port.current=null}
  // Appearance updates are applied below; rebuilding here would discard the pane viewport.
  },[cell,type,bus,timeframe])
- useEffect(()=>{const chart=chartRef.current;if(!chart)return;chart.applyOptions(oscillatorChartOptions(prefs,timeframe,bottom));for(const line of series.current)line.applyOptions({priceScaleId:prefs.priceScaleSide});updateBand()},[prefs,timeframe,bottom,updateBand])
+ useEffect(()=>{const chart=chartRef.current;if(!chart)return;chart.applyOptions(oscillatorChartOptions(prefs,timeframe,bottom));for(const line of series.current)line.applyOptions({priceScaleId:prefs.priceScaleSide});updateBand();const frame=requestAnimationFrame(updateBand);return()=>cancelAnimationFrame(frame)},[prefs,timeframe,bottom,updateBand])
  useEffect(()=>{if(!chartRef.current)return;anchor.current?.setData(bars.map(b=>({time:b.time/1000 as UTCTimestamp})));computed.lines.forEach((l,i)=>{series.current[i]?.applyOptions({color:l.color,lineWidth:s.width,lineStyle:style(s),lineVisible:s.lineVisible,lastValueVisible:s.showPriceLabel});series.current[i]?.setData(data(l.data))});hist.current?.applyOptions({visible:s.lineVisible,lastValueVisible:s.showPriceLabel});hist.current?.setData(data(computed.histogram));bus.update(cell+':'+type,bars.map(b=>b.time/1000),new Map(computed.lines[0].data.map(p=>[p.time,p.value])));updateBand()},[computed,bars,s,bus,cell,type,updateBand])
  const drag=useRef<{y:number;height:number}|null>(null)
- return <section className="oscillator-pane" aria-label={`${type} pane`} style={{height:renderedHeight}}>
+ return <section className={`oscillator-pane axis-${prefs.showPriceScale?prefs.priceScaleSide:'none'}`} aria-label={`${type} pane`} style={{height:renderedHeight}}>
   <div className="pane-divider" role="separator" aria-label={`Resize ${type} pane`} aria-orientation="horizontal" aria-valuemin={100} aria-valuemax={400} aria-valuenow={s.height} tabIndex={0} onPointerDown={e=>{drag.current={y:e.clientY,height:s.height};e.currentTarget.setPointerCapture(e.pointerId)}} onPointerMove={e=>{if(drag.current)onSettings(normalizeStudy(type,{...s,height:drag.current.height+drag.current.y-e.clientY}))}} onPointerUp={()=>{drag.current=null}} onLostPointerCapture={()=>{drag.current=null}} onKeyDown={e=>{if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();onSettings(normalizeStudy(type,{...s,height:s.height+(e.key==='ArrowUp'?10:-10)}))}}}/>
   <div ref={host} className="oscillator-canvas"/>
   {band?<div className="oscillator-band" style={band}/>:null}

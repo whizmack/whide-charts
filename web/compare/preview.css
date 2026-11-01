@@ -199,6 +199,7 @@ button,select,input{border-color:#303136;border-radius:3px}
 .workspace-utility-rail button[aria-pressed=true],.workspace-utility-rail button[aria-expanded=true]{background:#34363a;color:#fff}
 .workspace-utility-rail button:last-child{margin-top:auto}
 .workspace-utility-rail svg{width:17px;height:17px}
+.compare-app .workspace-utility-rail .layout-trigger-compact{display:none}
 .workspace-transport{
  position:relative;
  z-index:20;
@@ -245,6 +246,18 @@ button,select,input{border-color:#303136;border-radius:3px}
 .opencharts[data-drawing-rail-menu]{background:#18191b;border-color:#36373b;box-shadow:0 12px 32px #000a}
 .opencharts[data-drawing-rail-menu] button:hover{background:#2b2c2f}
 .pane-legend,.overlay-legends{left:45px}
+/* The workspace rail is outside each cell; reserve the opposite side for the price scale. */
+.price-pane > .relative > .absolute.pointer-events-none.select-none{left:12px!important;right:88px;overflow:hidden;white-space:nowrap}
+.price-pane > .relative > .absolute.pointer-events-none.select-none > div{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.price-pane > .relative > .absolute.pointer-events-none.select-none > div > span:not(:last-child){margin-right:6px}
+.price-pane.axis-left > .relative > .absolute.pointer-events-none.select-none{left:88px!important;right:12px}
+.price-pane.axis-none > .relative > .absolute.pointer-events-none.select-none{right:12px}
+.price-pane .overlay-legends{left:12px;right:88px}
+.price-pane.axis-left .overlay-legends{left:88px;right:12px}
+.price-pane.axis-none .overlay-legends{right:12px}
+.oscillator-pane .pane-legend{left:12px;right:88px}
+.oscillator-pane.axis-left .pane-legend{left:88px;right:12px}
+.oscillator-pane.axis-none .pane-legend{right:12px}
 .compare-app.desktop-shell .compare-toolbar{padding-left:78px}
 .compare-app.desktop-shell .window-drag-region{app-region:drag;-webkit-app-region:drag;align-self:stretch;min-width:24px;min-height:32px}
 
@@ -257,6 +270,8 @@ button,select,input{border-color:#303136;border-radius:3px}
 }
 
 @media(max-width:650px){
+ .compare-app .compare-toolbar .layout-trigger-desktop{display:none}
+ .compare-app .workspace-utility-rail .layout-trigger-compact{display:grid}
  .compare-toolbar{
   min-height:40px;
   height:40px;

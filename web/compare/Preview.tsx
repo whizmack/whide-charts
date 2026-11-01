@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useRef,useState,type CSSProperties} from 'react'
+import {useEffect,useLayoutEffect,useMemo,useRef,useState,type CSSProperties} from 'react'
 import {OpenChartsProvider,ChartSettingsDialog,useChartPreferences,type IndicatorType} from '@dylanpersonguy/opencharts'
 import type {Markets} from '../api'
 import {nextBoundary,type Symbol,type Timeframe} from '../replay'
@@ -12,7 +12,7 @@ import {applyModifierKey,defaultStudy,normalizeStudy,type Magnet,type StudySetti
 import {StudySettingsDialog} from './StudySettings'
 import {IndicatorBrowser} from './IndicatorBrowser'
 import {WatchlistPanel} from './WatchlistPanel'
-import {ActiveChartMaximizeButton,CellCaption,createWorkspaceBackup,IndicatorToolbarButton,LiveTransport,PairSelector,ReplayTransport,shouldShowCellCaption,TimeframeSelector,WorkspaceAboutDialog,WorkspaceDrawingRailHost,WorkspaceMagnetMenu,WorkspaceRangeToolbar,WorkspaceUtilityRail} from './WorkspaceChrome'
+import {ActiveChartMaximizeButton,CellCaption,ChartLayoutButton,createWorkspaceBackup,IndicatorToolbarButton,layoutMenuLeft,LiveTransport,PairSelector,ReplayTransport,shouldShowCellCaption,TimeframeSelector,WorkspaceAboutDialog,WorkspaceDrawingRailHost,WorkspaceMagnetMenu,WorkspaceRangeToolbar,WorkspaceUtilityRail} from './WorkspaceChrome'
 const prefix='opencharts-preview:'
 const desktopShell=typeof window!=='undefined'&&new URLSearchParams(window.location.search).get('desktop')==='1'
 function read<T>(key:string,fallback:T):T{try{return JSON.parse(localStorage.getItem(prefix+key)??'null')??fallback}catch{return fallback}}
@@ -74,13 +74,25 @@ export default function Preview(){
  function step(){if(!allReady||!available)return;const time=Math.min(nextBoundary(w.asOf,active.timeframe),available.end);if(time===w.asOf)setPlaying(false);else setW(v=>({...v,asOf:time}))}
  useEffect(()=>{if(!playing||!allReady||mode!=='replay')return;const timer=setTimeout(step,1000/speed);return()=>clearTimeout(timer)},[playing,allReady,mode,w.asOf,active.timeframe,speed])
  function changeMode(m:'live'|'replay'){if(m===mode)return;setPlaying(false);setHeld(false);setSettings(false);setAboutOpen(false);setMagnetMenuOpen(false);setStudyEdit(null);setReset(n=>n+1);setStatuses({});setMode(m)}
- function setLayout(layout:Layout){setPlaying(false);setMaximized(null);setW(v=>{const next={...v,layout};return {...next,active:visibleIds(next).includes(v.active)?v.active:'chart-1'}});setLayoutOpen(false);requestAnimationFrame(()=>layoutTriggerRef.current?.focus())}
+ function focusLayoutTrigger(){const button=[layoutTriggerRef.current,compactLayoutTriggerRef.current].find(item=>item&&item.getClientRects().length>0);button?.focus()}
+ function setLayout(layout:Layout){setPlaying(false);setMaximized(null);setW(v=>{const next={...v,layout};return {...next,active:visibleIds(next).includes(v.active)?v.active:'chart-1'}});setLayoutOpen(false);requestAnimationFrame(focusLayoutTrigger)}
  function exportWorkspace(){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(createWorkspaceBackup({workspace:w,liveWorkspace:liveCells,drawings,magnet,stay}),null,2)],{type:'application/json'}));a.href=url;a.download='perp-workspace-backup.json';a.click();URL.revokeObjectURL(url)}
- const split=useRef<{axis:'column'|'row';start:number;size:number;value:number}|null>(null),gridRef=useRef<HTMLDivElement>(null),layoutPopoverRef=useRef<HTMLDivElement>(null),layoutTriggerRef=useRef<HTMLButtonElement>(null)
+ const split=useRef<{axis:'column'|'row';start:number;size:number;value:number}|null>(null),gridRef=useRef<HTMLDivElement>(null),layoutPopoverRef=useRef<HTMLDivElement>(null),layoutTriggerRef=useRef<HTMLButtonElement>(null),compactLayoutTriggerRef=useRef<HTMLButtonElement>(null)
+ const [layoutMenuStyle,setLayoutMenuStyle]=useState<CSSProperties|undefined>()
+ useLayoutEffect(()=>{
+  if(!layoutOpen)return
+  const position=()=>{
+   const trigger=layoutTriggerRef.current,menu=layoutPopoverRef.current
+   if(!trigger||!menu||trigger.getClientRects().length===0){setLayoutMenuStyle(undefined);return}
+   setLayoutMenuStyle({left:layoutMenuLeft(trigger.getBoundingClientRect().left,menu.getBoundingClientRect().width,window.innerWidth),right:'auto'})
+  }
+  position();window.addEventListener('resize',position)
+  return()=>window.removeEventListener('resize',position)
+ },[layoutOpen])
  useEffect(()=>{
   if(!layoutOpen)return
-  const outside=(event:PointerEvent)=>{const target=event.target;if(target instanceof Node&&!layoutPopoverRef.current?.contains(target)&&!layoutTriggerRef.current?.contains(target))setLayoutOpen(false)}
-  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();setLayoutOpen(false);layoutTriggerRef.current?.focus()}}
+  const outside=(event:PointerEvent)=>{const target=event.target;if(target instanceof Node&&!layoutPopoverRef.current?.contains(target)&&!layoutTriggerRef.current?.contains(target)&&!compactLayoutTriggerRef.current?.contains(target))setLayoutOpen(false)}
+  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();setLayoutOpen(false);focusLayoutTrigger()}}
   document.addEventListener('pointerdown',outside);window.addEventListener('keydown',escape)
   return()=>{document.removeEventListener('pointerdown',outside);window.removeEventListener('keydown',escape)}
  },[layoutOpen])
@@ -92,11 +104,12 @@ export default function Preview(){
    <PairSelector value={active.symbol} onChange={symbol=>patchCell(activeId,{symbol})}/>
    <TimeframeSelector value={active.timeframe} onChange={timeframe=>patchCell(activeId,{timeframe})}/>
    <IndicatorToolbarButton buttonRef={indicatorTriggerRef} expanded={indicatorsOpen} onToggle={()=>{setIndicatorsOpen(v=>!v);setLayoutOpen(false)}}/>
+   <ChartLayoutButton buttonRef={layoutTriggerRef} className="layout-trigger-desktop" open={layoutOpen} onToggle={()=>{setLayoutOpen(v=>!v);setIndicatorsOpen(false)}}/>
    <div className="compare-modes" role="group" aria-label="Chart mode">{(['live','replay'] as const).map(m=><button key={m} aria-pressed={mode===m} onClick={()=>changeMode(m)}>{m==='live'?'Live':'Replay'}</button>)}</div>
    <div className={`toolbar-spacer${desktopShell?' window-drag-region':''}`}/>
    <ActiveChartMaximizeButton maximized={Boolean(maximized)} onToggle={()=>setMaximized(maximized?null:activeId)}/>
   </header>
-  {layoutOpen?<div ref={layoutPopoverRef} className="workspace-popover layout-popover" role="group" aria-labelledby="layout-popover-title"><h2 id="layout-popover-title" className="sr-only">Chart layout</h2><div className="layout-options">{layoutGroups.map(group=><div className="layout-group" key={group.count} role="group" aria-label={`${group.count} chart${group.count===1?'':'s'}`}><span className="layout-count" aria-hidden="true">{group.count}</span><div className="layout-option-list">{group.layouts.map(layout=><button key={layout.id} type="button" aria-label={layout.label} title={layout.label} aria-pressed={w.layout===layout.id} onClick={()=>setLayout(layout.id)}><LayoutDiagram layout={layout.id}/></button>)}</div></div>)}</div><section className="layout-sync" aria-label="Sync in layout"><h3>Sync in layout</h3><button type="button" className="layout-sync-row" role="switch" aria-checked={w.syncCrosshair} title="Sync the crosshair across visible charts" onClick={()=>setW(v=>({...v,syncCrosshair:!v.syncCrosshair}))}><span>Crosshair</span><span className="layout-sync-info" aria-hidden="true">i</span><span className={`layout-switch${w.syncCrosshair?' is-on':''}`} aria-hidden="true"><span/></span></button><button type="button" className="layout-sync-row" role="switch" aria-checked={w.syncTime} title="Synchronize time and scrolling across visible charts" onClick={()=>setW(v=>({...v,syncTime:!v.syncTime}))}><span>Time &amp; scrolling</span><span className="layout-sync-info" aria-hidden="true">i</span><span className={`layout-switch${w.syncTime?' is-on':''}`} aria-hidden="true"><span/></span></button></section></div>:null}
+  {layoutOpen?<div ref={layoutPopoverRef} style={layoutMenuStyle} className="workspace-popover layout-popover" role="group" aria-labelledby="layout-popover-title"><h2 id="layout-popover-title" className="sr-only">Chart layout</h2><div className="layout-options">{layoutGroups.map(group=><div className="layout-group" key={group.count} role="group" aria-label={`${group.count} chart${group.count===1?'':'s'}`}><span className="layout-count" aria-hidden="true">{group.count}</span><div className="layout-option-list">{group.layouts.map(layout=><button key={layout.id} type="button" aria-label={layout.label} title={layout.label} aria-pressed={w.layout===layout.id} onClick={()=>setLayout(layout.id)}><LayoutDiagram layout={layout.id}/></button>)}</div></div>)}</div><section className="layout-sync" aria-label="Sync in layout"><h3>Sync in layout</h3><button type="button" className="layout-sync-row" role="switch" aria-checked={w.syncCrosshair} title="Sync the crosshair across visible charts" onClick={()=>setW(v=>({...v,syncCrosshair:!v.syncCrosshair}))}><span>Crosshair</span><span className="layout-sync-info" aria-hidden="true">i</span><span className={`layout-switch${w.syncCrosshair?' is-on':''}`} aria-hidden="true"><span/></span></button><button type="button" className="layout-sync-row" role="switch" aria-checked={w.syncTime} title="Synchronize time and scrolling across visible charts" onClick={()=>setW(v=>({...v,syncTime:!v.syncTime}))}><span>Time &amp; scrolling</span><span className="layout-sync-info" aria-hidden="true">i</span><span className={`layout-switch${w.syncTime?' is-on':''}`} aria-hidden="true"><span/></span></button></section></div>:null}
   <main className="workspace-main">
    <WorkspaceDrawingRailHost setHost={setDrawingRailHost}/>
    <div ref={gridRef} className={`workspace-grid layout-${maximized?'one':w.layout}`} style={{'--column':w.column+'%','--row':w.row+'%'} as CSSProperties}>
@@ -107,7 +120,7 @@ export default function Preview(){
     {!maximized&&['columns','three','four'].includes(w.layout)?divider('column'):null}{!maximized&&['rows','three','four'].includes(w.layout)?divider('row'):null}
    </div>
    {sidebar?<WatchlistPanel activeSymbol={active.symbol} onSelect={symbol=>patchCell(activeId,{symbol})}/>:null}
-   <WorkspaceUtilityRail watchlistOpen={sidebar} layoutOpen={layoutOpen} layoutButtonRef={layoutTriggerRef} onToggleWatchlist={()=>setSidebar(v=>!v)} onToggleLayout={()=>{setLayoutOpen(v=>!v);setIndicatorsOpen(false)}} onOpenSettings={()=>setSettings(true)} onOpenAbout={()=>setAboutOpen(true)} onExport={exportWorkspace}/>
+   <WorkspaceUtilityRail watchlistOpen={sidebar} layoutOpen={layoutOpen} layoutButtonRef={compactLayoutTriggerRef} onToggleWatchlist={()=>setSidebar(v=>!v)} onToggleLayout={()=>{setLayoutOpen(v=>!v);setIndicatorsOpen(false)}} onOpenSettings={()=>setSettings(true)} onOpenAbout={()=>setAboutOpen(true)} onExport={exportWorkspace}/>
   </main>
   {mode==='replay'?<ReplayTransport asOf={w.asOf} available={available} playing={playing} ready={allReady} speed={speed} timeframe={active.timeframe} onSeek={seek} onTogglePlaying={()=>setPlaying(v=>!v)} onStep={step} onSpeed={setSpeed}/>:null}
   <WorkspaceRangeToolbar cell={chartBusCellId(activeId,mode)} timeframe={active.timeframe} mode={mode} asOf={w.asOf} bus={bus}>

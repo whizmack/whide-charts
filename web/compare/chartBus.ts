@@ -1,6 +1,10 @@
 import type {IChartApi,ISeriesApi,Time,LogicalRange,UTCTimestamp,MouseEventParams} from 'lightweight-charts'
 import {logicalAt,timeAt} from './workspace'
 export type ChartPort={id:string;cell:string;chart:IChartApi;series:ISeriesApi<'Candlestick'>|ISeriesApi<'Line'>;times:number[];values:Map<number,number>;width:number;onHover?:(time:number|null)=>void}
+/** Lightweight Charts 4.2 can report an absent axis during a scale-side transition. */
+export function safePriceScaleWidth(chart:IChartApi,side:'left'|'right'):number|null{
+ try{return chart.priceScale(side).width()}catch(error){if(error instanceof Error&&error.message==='Value is null')return null;throw error}
+}
 /** One bus for panes and chart cells. Values are mapped by time, never copied across symbols. */
 export class ChartBus{
  private ports=new Map<string,ChartPort>();private cleanups=new Map<string,()=>void>();private crossing=false;private aligning=false
@@ -82,11 +86,17 @@ export class ChartBus{
  private alignScales(cell:string){
   if(this.aligning)return
   const group=[...this.ports.values()].filter(p=>p.cell===cell)
-  let width=0
-  for(const p of group){const w=p.chart.priceScale('right').width();if(Number.isFinite(w)&&w>width)width=Math.ceil(w)}
-  if(width<1)return
   this.aligning=true
-  try{for(const p of group){const scale=p.chart.priceScale('right');if((scale.options().minimumWidth??0)!==width)scale.applyOptions({minimumWidth:width})}}finally{this.aligning=false}
+  try{
+   for(const side of ['left','right'] as const){
+    const visible=group.filter(p=>p.chart.priceScale(side).options().visible)
+    const widths=visible.map(p=>safePriceScaleWidth(p.chart,side))
+    if(widths.some(w=>w===null))continue
+    const width=Math.ceil(Math.max(0,...widths.filter((w):w is number=>w!==null&&Number.isFinite(w))))
+    if(width<1)continue
+    for(const p of visible){const scale=p.chart.priceScale(side);if((scale.options().minimumWidth??0)!==width)scale.applyOptions({minimumWidth:width})}
+   }
+  }finally{this.aligning=false}
  }
  private setHorz(port:ChartPort,visible:boolean){
   if(this.horz.get(port.id)===visible)return

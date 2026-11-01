@@ -26,6 +26,14 @@ uses separate oscillator chart instances with shared timestamps. The four-cell
 workspace, indicator settings, drawing histories and synchronization live in
 `web/compare/`.
 
+The 2026-11-01 resize follow-up exports `observeChartSize` and uses it for the
+price chart. ResizeObserver notifications are coalesced and chart size writes
+are deferred to the next animation frame; disposal disconnects the observer
+and cancels pending work. The host uses the same helper for oscillator charts.
+The patch includes `src/__tests__/chart-resize.test.ts` for coalescing, latest
+dimensions and disposal. Repackaging the same version requires refreshing the
+lockfile integrity and reinstalling the host dependencies.
+
 Magnet preview uses the drawing manager's own OHLC/object/angle resolver to move
 the active chart crosshair before placement. It reacts to modifier changes and
 live-series updates, with pointer/blur/disposal cleanup. Regression tests are
