@@ -34,6 +34,25 @@ The patch includes `src/__tests__/chart-resize.test.ts` for coalescing, latest
 dimensions and disposal. Repackaging the same version requires refreshing the
 lockfile integrity and reinstalling the host dependencies.
 
+The 2026-11-02 workspace pass orders the supported drawing groups to follow
+the supplied desktop reference while keeping visual and keyboard order the
+same. `src/__tests__/workspace-overlays.test.tsx` covers that order.
+Price-axis and OHLC labels use grouped English numbers while retaining the
+configured price precision and minMove. The volume series keeps its own format;
+`chart-settings-options.test.ts` and `chart-status-line.test.tsx` cover the
+formatter and status line.
+Locale-based day ticks are compact while respecting the selected timezone and
+weekday option. Explicit date formats remain available; the numeric month in
+`yyyy-MM-dd` is corrected. These mappings are covered by the options tests.
+Drawing flyouts expose named menus, arrow/Home/End navigation and Escape, with
+focus restored to their rail trigger on dismissal or selection. The portaled
+menu tests cover keyboard navigation and selection.
+The 2026-11-04 follow-up exposes optional favorite-tool state and toggle
+callbacks on the controlled chart. Drawing flyouts render independent favorite
+controls without closing the menu or selecting a drawing; keyboard users can
+move between the tool and its star. The host owns and persists the selection.
+The workspace overlay test covers toggling and focus restoration.
+
 Magnet preview uses the drawing manager's own OHLC/object/angle resolver to move
 the active chart crosshair before placement. It reacts to modifier changes and
 live-series updates, with pointer/blur/disposal cleanup. Regression tests are

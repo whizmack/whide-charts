@@ -3,7 +3,7 @@ index 3d3d66e..e63d5f0 100644
 --- a/scripts/build-lib-css.mjs
 +++ b/scripts/build-lib-css.mjs
 @@ -19,10 +19,23 @@ import postcssConfig from "../postcss.config.js";
- 
+
  const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  const SOURCE = join(ROOT, "src/styles/global.css");
 +const DRAWING_SETTINGS_SOURCE = join(
@@ -16,7 +16,7 @@ index 3d3d66e..e63d5f0 100644
 +);
  const OUT_DIR = join(ROOT, "dist-lib");
  const OUT = join(OUT_DIR, "style.css");
- 
+
 -const input = readFileSync(SOURCE, "utf8");
 +// Component CSS imported from TypeScript is emitted by Vite as opencharts.css,
 +// but consumers intentionally import only the public style.css export. Keep
@@ -25,7 +25,7 @@ index 3d3d66e..e63d5f0 100644
 +  .map((source) => readFileSync(source, "utf8"))
 +  .join("\n");
  const result = await postcss(postcssConfig.plugins).process(input, { from: SOURCE, to: OUT });
- 
+
  for (const warning of result.warnings()) console.warn(`[css] ${warning.toString()}`);
 diff --git a/scripts/check-package.mjs b/scripts/check-package.mjs
 index 638a850..1b837f1 100644
@@ -33,7 +33,7 @@ index 638a850..1b837f1 100644
 +++ b/scripts/check-package.mjs
 @@ -24,6 +24,10 @@ for (const [subpath, target] of Object.entries(pkg.exports)) {
  }
- 
+
  const core = readFileSync(join(ROOT, "dist-lib/index.js"), "utf8");
 +const style = readFileSync(join(ROOT, "dist-lib/style.css"), "utf8");
 +for (const selector of [".opencharts .drawing-floating-toolbar", ".opencharts .drawing-settings-dialog", ".opencharts .drawing-settings-frame"]) {
@@ -291,10 +291,10 @@ index 0000000..9151d2f
 +});
 diff --git a/src/__tests__/chart-settings-options.test.ts b/src/__tests__/chart-settings-options.test.ts
 new file mode 100644
-index 0000000..b455781
+index 0000000..550669d
 --- /dev/null
 +++ b/src/__tests__/chart-settings-options.test.ts
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,184 @@
 +import { describe, expect, it } from "vitest";
 +import {
 +  LineStyle,
@@ -343,8 +343,20 @@ index 0000000..b455781
 +      wickDownColor: "#ff6677",
 +      wickVisible: false,
 +      borderVisible: false,
-+      priceFormat: { precision: 4, minMove: 0.0001 },
++      priceFormat: { type: "custom", minMove: 0.0001 },
 +    });
++  });
++
++  it("formats price labels with grouping and configured precision", () => {
++    const two = buildCandlestickSettingsOptions(prefs({pricePrecision: "default"}), CHART_COLORS.dark, 2, 0.01).priceFormat;
++    const three = buildCandlestickSettingsOptions(prefs({pricePrecision: 3}), CHART_COLORS.dark, 2, 0.01).priceFormat;
++    expect(two?.type).toBe("custom");
++    expect(three?.type).toBe("custom");
++    if (two?.type !== "custom" || three?.type !== "custom") throw new Error("missing price formatter");
++    expect(two.formatter?.(77894.17)).toBe("77,894.17");
++    expect(three.formatter?.(94.621)).toBe("94.621");
++    expect(two.minMove).toBe(0.01);
++    expect(three.minMove).toBe(0.001);
 +  });
 +
 +  it("maps vertical and horizontal grid preferences independently", () => {
@@ -440,6 +452,16 @@ index 0000000..b455781
 +    expect(timestamp).toBe(Date.UTC(2026, 2, 1, 0, 30) / 1_000);
 +  });
 +
++  it("uses compact locale day ticks while retaining explicit date formats", () => {
++    const timestamp = (Date.UTC(2026, 9, 4, 12) / 1_000) as UTCTimestamp;
++    const axis = (format: string, showDayOfWeek: boolean) => buildChartSettingsOptions(
++      prefs({ displayTimezone: "Etc/UTC", timeScaleDateFormat: format, timeScaleShowDayOfWeek: showDayOfWeek }), CHART_COLORS.dark, "4h"
++    ).timeScale?.tickMarkFormatter as TickMarkFormatter;
++    expect(axis("locale", false)(timestamp, TickMarkType.DayOfMonth, "en-US")).toBe("4");
++    expect(axis("yyyy-MM-dd", false)(timestamp, TickMarkType.DayOfMonth, "en-US")).toBe("2026-10-04");
++    expect(axis("locale", false)(timestamp, TickMarkType.Month, "en-US")).toBe("Oct");
++  });
++
 +  it("adds the selected weekday to day-of-month labels without changing timestamps", () => {
 +    const timestamp = (Date.UTC(2026, 2, 1, 0, 30) / 1_000) as UTCTimestamp;
 +    const options = buildChartSettingsOptions(
@@ -453,7 +475,7 @@ index 0000000..b455781
 +    );
 +    const formatter = options.timeScale?.tickMarkFormatter as TickMarkFormatter | undefined;
 +
-+    expect(formatter?.(timestamp, TickMarkType.DayOfMonth, "en-US")).toBe("Sat, Feb 28, 2026");
++    expect(formatter?.(timestamp, TickMarkType.DayOfMonth, "en-US")).toBe("Sat 28");
 +    expect(timestamp).toBe(Date.UTC(2026, 2, 1, 0, 30) / 1_000);
 +  });
 +});
@@ -891,10 +913,10 @@ index 0000000..b64b088
 +});
 diff --git a/src/__tests__/chart-status-line.test.tsx b/src/__tests__/chart-status-line.test.tsx
 new file mode 100644
-index 0000000..e9c0252
+index 0000000..1ace3da
 --- /dev/null
 +++ b/src/__tests__/chart-status-line.test.tsx
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,51 @@
 +import { render } from "@testing-library/react";
 +import { describe, expect, it } from "vitest";
 +import { ChartLegendHeader, OhlcvLegendRow } from "../pages/trading/ChartPanel.tsx";
@@ -915,6 +937,14 @@ index 0000000..e9c0252
 +    );
 +    expect(valueSpans).toHaveLength(5);
 +    expect(valueSpans.map((span) => span.style.color)).toEqual(Array(5).fill("rgb(41, 98, 255)"));
++  });
++
++  it("groups large OHLC prices while retaining instrument precision", () => {
++    const { container } = render(<OhlcvLegendRow
++      legend={{ o: 77894.17, h: 78254.17, l: 77602.72, c: 77882.01, v: 0, change: 0, color: "#fff" } as never}
++      pipDigits={2} showChange={false} showVolume={false} />);
++    expect(container.textContent).toContain("77,894.17");
++    expect(container.textContent).toContain("78,254.17");
 +  });
 +
 +  it("lets status-line text inherit the TradingView UI font instead of forcing monospace", () => {
@@ -2313,10 +2343,10 @@ index 0000000..6aa126a
 +});
 diff --git a/src/__tests__/workspace-overlays.test.tsx b/src/__tests__/workspace-overlays.test.tsx
 new file mode 100644
-index 0000000..248383d
+index 0000000..8e046f4
 --- /dev/null
 +++ b/src/__tests__/workspace-overlays.test.tsx
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,74 @@
 +import {render,screen,fireEvent,cleanup} from '@testing-library/react';
 +import {afterEach,expect,it,vi} from 'vitest';
 +import {ChartContextMenu} from '../pages/trading/ChartContextMenu';
@@ -2352,6 +2382,44 @@ index 0000000..248383d
 + const layer=document.querySelector('[data-chart-context-layer]');
 + expect(layer?.parentElement).toBe(document.body);expect(container.contains(layer)).toBe(false);
 + fireEvent.click(screen.getByRole('button',{name:'Chart Settings…'}));expect(open).toHaveBeenCalledOnce();
++});
++
++it('keeps supported drawing groups in the same visual and keyboard order',()=>{
++ render(<DrawingToolRail drawingTool="none" onDrawingTool={()=>{}}/>);
++ const names=screen.getAllByRole('button').map(button=>button.getAttribute('title'));
++ expect(names.filter(name=>['Lines','Fibonacci','Trade','Brushes','Shapes','Text & Notes','Measure'].includes(name??''))).toEqual(['Lines','Fibonacci','Trade','Brushes','Shapes','Text & Notes','Measure']);
++});
++it('supports keyboard navigation and restores focus after dismissing the drawing menu',()=>{
++ const onTool=vi.fn();
++ render(<DrawingToolRail drawingTool="none" onDrawingTool={onTool}/>);
++ const trigger=screen.getByRole('button',{name:'Lines'});
++ trigger.focus();fireEvent.keyDown(trigger,{key:'ArrowDown'});
++ const menu=screen.getByRole('menu',{name:'Lines'});
++ const items=screen.getAllByRole('menuitem');
++ expect(items[0]).toHaveFocus();expect(trigger).toHaveAttribute('aria-expanded','true');
++ fireEvent.keyDown(items[0],{key:'End'});expect(items.at(-1)).toHaveFocus();
++ fireEvent.keyDown(items.at(-1)!,{key:'ArrowDown'});expect(items[0]).toHaveFocus();
++ fireEvent.keyDown(items[0],{key:'Escape'});
++ expect(menu).not.toBeInTheDocument();expect(trigger).toHaveFocus();expect(onTool).not.toHaveBeenCalled();
++});
++it('returns focus to the rail after selecting a drawing tool',()=>{
++ const onTool=vi.fn();render(<DrawingToolRail drawingTool="none" onDrawingTool={onTool}/>);
++ const trigger=screen.getByRole('button',{name:'Lines'});fireEvent.click(trigger);
++ fireEvent.click(screen.getByRole('menuitem',{name:'Trend Line'}));
++ expect(onTool).toHaveBeenCalledWith('trendline');expect(trigger).toHaveFocus();
++ expect(screen.queryByRole('menu',{name:'Lines'})).not.toBeInTheDocument();
++});
++it('toggles a favorite without selecting a tool or closing the drawing menu',()=>{
++ const onTool=vi.fn(),onFavorite=vi.fn();
++ const {rerender}=render(<DrawingToolRail drawingTool="none" onDrawingTool={onTool} favoriteTools={[]} onFavoriteToggle={onFavorite}/>);
++ fireEvent.click(screen.getByRole('button',{name:'Lines'}));
++ const star=screen.getByRole('menuitemcheckbox',{name:'Favorite Trend Line'});
++ expect(star).toHaveAttribute('aria-checked','false');
++ fireEvent.click(star);expect(onFavorite).toHaveBeenCalledWith('trendline');
++ expect(onTool).not.toHaveBeenCalled();expect(screen.getByRole('menu',{name:'Lines'})).toBeInTheDocument();
++ rerender(<DrawingToolRail drawingTool="none" onDrawingTool={onTool} favoriteTools={['trendline']} onFavoriteToggle={onFavorite}/>);
++ expect(star).toHaveAttribute('aria-checked','true');
++ fireEvent.keyDown(star,{key:'Escape'});expect(screen.getByRole('button',{name:'Lines'})).toHaveFocus();
 +});
 diff --git a/src/components/TradingViewColorPicker.tsx b/src/components/TradingViewColorPicker.tsx
 new file mode 100644
@@ -2792,7 +2860,7 @@ index dca48eb..50d9ac3 100644
 @@ -55,9 +103,18 @@ export interface ChartPreferences {
    challengeProfitTargetLine: boolean;
  }
- 
+
 +export type PricePrecision = "default" | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 +export type PriceScaleModePreference = "normal" | "logarithmic" | "percentage" | "indexedTo100";
 +export type PriceScaleSidePreference = "right" | "left";
@@ -2802,10 +2870,10 @@ index dca48eb..50d9ac3 100644
 +export type CrosshairLineStyle = "solid" | "dotted" | "dashed" | "large-dashed";
 +
  type TraderPrefs = Record<string, string>;
- 
+
  const CHART_PREFS_UPDATED_EVENT = "chart-preferences-updated";
 +let chartPreferencesPreview: { userId: string | undefined; prefs: ChartPreferences } | null = null;
- 
+
  const DEFAULT_CHART_PREFS: ChartPreferences = {
    showBidLine: true,
 @@ -69,8 +126,17 @@ const DEFAULT_CHART_PREFS: ChartPreferences = {
@@ -2872,7 +2940,7 @@ index dca48eb..50d9ac3 100644
    challengeMaxDrawdownLine: false,
    challengeProfitTargetLine: false,
  };
- 
+
 +export function getDefaultChartPreferences(): ChartPreferences {
 +  return { ...DEFAULT_CHART_PREFS, activePlugins: [] };
 +}
@@ -2913,7 +2981,7 @@ index dca48eb..50d9ac3 100644
 +  "enableChartScroll",
 +  "enableChartScale",
  ] as const;
- 
+
  /** String preference keys stored raw (empty string allowed). */
  const STRING_PREF_KEYS = [
    "candleUpColor",
@@ -2950,7 +3018,7 @@ index dca48eb..50d9ac3 100644
 +  "priceScaleBottomMargin",
 +  "scaleTextSize",
  ] as const;
- 
+
  /**
 @@ -147,6 +294,8 @@ export const TEMPLATE_PREF_KEYS = [
    "showCandleBorders",
@@ -3016,12 +3084,12 @@ index dca48eb..50d9ac3 100644
 +  "enableChartScroll",
 +  "enableChartScale",
  ] as const;
- 
+
  export type TemplatePrefKey = (typeof TEMPLATE_PREF_KEYS)[number];
 @@ -202,15 +392,128 @@ function toStringArray(input: string | undefined, fallback: string[]): string[]
    }
  }
- 
+
 +function oneOf<T extends string>(input: string | undefined, values: readonly T[], fallback: T): T {
 +  return values.find((value) => value === input) ?? fallback;
 +}
@@ -3152,7 +3220,7 @@ index dca48eb..50d9ac3 100644
 @@ -227,6 +530,24 @@ export function updateChartPreferences(patch: Partial<ChartPreferences>): Trader
      next[key] = typeof value === "string" ? value : JSON.stringify(value);
    }
- 
+
 +  if (patch.showGrid != null || patch.showVerticalGrid != null || patch.showHorizontalGrid != null) {
 +    const current = getChartPreferencesFromStorage();
 +    const vertical = patch.showVerticalGrid ?? patch.showGrid ?? current.showVerticalGrid;
@@ -3177,7 +3245,7 @@ index dca48eb..50d9ac3 100644
 @@ -237,6 +558,29 @@ export function notifyChartPreferencesUpdated(): void {
    dispatchChartPrefsUpdated();
  }
- 
+
 +/** Apply modal draft settings to subscribers without touching persistent storage. */
 +export function setChartPreferencesPreview(prefs: ChartPreferences): void {
 +  chartPreferencesPreview = {
@@ -3207,7 +3275,7 @@ index dca48eb..50d9ac3 100644
 @@ -251,5 +595,7 @@ export function useChartPreferences(): ChartPreferences {
      };
    }, [userId]);
- 
+
 -  return prefs;
 +  const previewState = chartPreferencesPreview;
 +  const preview = previewState && previewState.userId === userId ? previewState.prefs : null;
@@ -3251,7 +3319,7 @@ index aaf4198..afdb8d7 100644
    if (Number.isFinite(d.price)) views.push(new PriceAxisLabelView(source, d.price, d.color));
    if (d.price2 != null) views.push(new PriceAxisLabelView(source, d.price2, d.color));
  }
- 
+
 +export function shouldAppendAxisViews(drawing: DrawingLine, selected: boolean): boolean {
 +  return selected && !(drawing.type === "position" && drawing.showPriceLabels === false);
 +}
@@ -3268,7 +3336,7 @@ index aaf4198..afdb8d7 100644
   * preview) on one canvas pass. Interaction state (hover/selection) is pushed
 @@ -117,7 +128,7 @@ export class DrawingsPrimitive extends PluginBase {
    private _axisViews: PriceAxisLabelView[] = [];
- 
+
    setDrawings(drawings: DrawingLine[]): void {
 -    this._drawings = drawings;
 +    this._drawings = sortDrawingsForRender(drawings);
@@ -3386,7 +3454,7 @@ index 4cb0393..6e5eaa5 100644
 -import { dist, distToSegment, type Pt, pointInBox } from "./geometry";
 +import { dist, distToPolyline, distToQuadratic, distToSegment, type Pt, pointInBox } from "./geometry";
  import type { Hit, PriceKey, ResolvedEntry, TimeKey } from "./types";
- 
+
  const HANDLE_TOLERANCE = 8;
 @@ -47,12 +47,69 @@ function hitEntry(e: ResolvedEntry, p: Pt, tol: Tol): Hit | null {
      case "triangle":
@@ -3412,7 +3480,7 @@ index 4cb0393..6e5eaa5 100644
        return null;
    }
  }
- 
+
 +function hitDateRange(e: ResolvedEntry, p: Pt, tol: Tol): Hit | null {
 +  if (e.x1 === null || e.x2 === null) return null;
 +  if (Math.abs(p.x - e.x1) <= tol.handle) return pointHit(e, "time", null);
@@ -3483,7 +3551,7 @@ index 43c6bf6..19a35fe 100644
  const LONG_PRESS_CANCEL_PX = 10;
 +const MAX_FREEHAND_SAMPLES = 1024;
 +const MAX_STORED_FREEHAND_POINTS = 512;
- 
+
  // TradingView keyboard shortcuts (Alt+key, matched on physical key code).
  const TOOL_SHORTCUTS: Record<string, DrawingTool> = {
 @@ -105,6 +107,11 @@ interface PlacingState {
@@ -3496,7 +3564,7 @@ index 43c6bf6..19a35fe 100644
 +interface FreehandState {
 +  samples: Array<{ data: DataPoint; pixel: Pt }>;
  }
- 
+
  export interface DrawingToolsManagerOptions {
 @@ -146,10 +153,18 @@ export class DrawingToolsManager {
    private tool: DrawingTool = "none";
@@ -3528,7 +3596,7 @@ index 43c6bf6..19a35fe 100644
      this.container.addEventListener("contextmenu", this.handleContextMenu);
      this.container.addEventListener("touchstart", this.handleTouchStart, {
 @@ -188,7 +206,12 @@ export class DrawingToolsManager {
- 
+
    destroy(): void {
      this.clearLongPress();
 +    this.cancelPlacement();
@@ -3541,12 +3609,12 @@ index 43c6bf6..19a35fe 100644
      this.container.removeEventListener("contextmenu", this.handleContextMenu);
      this.container.removeEventListener("touchstart", this.handleTouchStart, true);
 @@ -215,6 +238,7 @@ export class DrawingToolsManager {
- 
+
    setMagnetMode(mode: MagnetMode): void {
      this.magnetMode = mode;
 +    this.refreshSnapPreview();
    }
- 
+
    setStyleDefaults(defaults: Record<string, Partial<DrawingLine>>): void {
 @@ -250,7 +274,7 @@ export class DrawingToolsManager {
      // Mid-drag the local copy is authoritative; the post-onUpdate sync will
@@ -3578,9 +3646,9 @@ index 43c6bf6..19a35fe 100644
 +    if (tool === "highlighter") return { ...two, type: "highlighter", width: 12 };
      return { ...two, type: tool as DrawingType };
    }
- 
+
 @@ -361,6 +391,8 @@ export class DrawingToolsManager {
- 
+
    private handleMouseMove = (e: MouseEvent): void => {
      const pos = this.eventPos(e);
 +    this.lastPointer = pos ? { pos, shiftKey: e.shiftKey } : null;
@@ -3599,7 +3667,7 @@ index 43c6bf6..19a35fe 100644
      }
 @@ -377,14 +409,25 @@ export class DrawingToolsManager {
    };
- 
+
    private handleMouseUp = (e: MouseEvent): void => {
 -    if (this.drag) {
 -      this.endDrag();
@@ -3616,7 +3684,7 @@ index 43c6bf6..19a35fe 100644
 +    this.lastPointer = pos ? { pos, shiftKey: e.shiftKey } : null;
 +    this.refreshSnapPreview();
    };
- 
+
    private handleDblClick = (e: MouseEvent): void => {
 +    if (this.tool === "polyline" && this.placing) {
 +      e.preventDefault();
@@ -3634,7 +3702,7 @@ index 43c6bf6..19a35fe 100644
 -    if (this.placing && pos) this.placingMove(pos, false);
 +    if ((this.placing || this.freehand) && pos) this.placingMove(pos, false);
    };
- 
+
    private handleTouchEnd = (e: TouchEvent): void => {
 @@ -441,6 +484,11 @@ export class DrawingToolsManager {
        this.endDrag();
@@ -3650,7 +3718,7 @@ index 43c6bf6..19a35fe 100644
      this.maybeCommitPlacement(t ? this.posFromClient(t.clientX, t.clientY) : null, false);
 @@ -471,6 +519,7 @@ export class DrawingToolsManager {
    // ── Keyboard ───────────────────────────────────────────────────────
- 
+
    private handleKeyDown = (e: KeyboardEvent): void => {
 +    if (!this.keyboardEnabled) return;
      if (isTextInputTarget(e.target)) return;
@@ -3675,7 +3743,7 @@ index 43c6bf6..19a35fe 100644
 -      .map((d) => ({ ...d }));
 +      .map((d) => ({ ...d, points: d.points?.map((point) => ({ ...point })) }));
    }
- 
+
    private pasteClipboard(): void {
 @@ -575,6 +629,8 @@ export class DrawingToolsManager {
        time: d.time != null ? d.time + dt : undefined,
@@ -3685,7 +3753,7 @@ index 43c6bf6..19a35fe 100644
 +      points: d.points?.map((point) => ({ ...point, time: point.time + dt })),
      };
    }
- 
+
 @@ -615,10 +671,39 @@ export class DrawingToolsManager {
      // Take the event over so the chart doesn't pan while drawing.
      e.preventDefault();
@@ -3729,7 +3797,7 @@ index 43c6bf6..19a35fe 100644
        return;
 @@ -661,11 +746,104 @@ export class DrawingToolsManager {
    }
- 
+
    private placingMove(pos: Pt, shiftKey: boolean): void {
 +    if (this.freehand) {
 +      const pt = this.toPoint(pos);
@@ -3763,7 +3831,7 @@ index 43c6bf6..19a35fe 100644
 +    }
      this.primitive.setPreview(this.makeNew(this.tool, this.placing.p1, pt));
    }
- 
+
 +  private makeFreehand(tool: DrawingTool, samples: FreehandState["samples"]): DrawingLine {
 +    const first = samples[0]!.data;
 +    const last = samples.at(-1)!.data;
@@ -3846,13 +3914,13 @@ index 43c6bf6..19a35fe 100644
      this.applyCursor(null);
      this.cb.onToolFinished();
 @@ -690,6 +870,7 @@ export class DrawingToolsManager {
- 
+
    private cancelPlacement(): void {
      this.placing = null;
 +    this.freehand = null;
      this.primitive.setPreview(null);
    }
- 
+
 @@ -785,7 +966,18 @@ export class DrawingToolsManager {
      const pt = this.pointFor(pos, shiftKey, this.dragAnchorPx(drag));
      if (!pt) return null;
@@ -3920,12 +3988,12 @@ index 43c6bf6..19a35fe 100644
 +    const updated = { ...origin, time: p1.time, price: p1.price, time2: p2.time, price2: p2.price };
 +    return updated;
    }
- 
+
    // Body-drag a parallel channel: move all three anchors together.
 @@ -875,6 +1104,34 @@ export class DrawingToolsManager {
      }
    }
- 
+
 +  // Preview the exact resolver used by placement/anchor dragging, not LC's
 +  // close-only magnet mode. It also reacts to Cmd release without mouse motion.
 +  private refreshSnapPreview = (): void => {
@@ -3955,7 +4023,7 @@ index 43c6bf6..19a35fe 100644
 +  };
 +
    // ── Snapping (Shift = 45° angle, magnet = OHLC price) ──────────────
- 
+
    /**
 @@ -915,6 +1172,14 @@ export class DrawingToolsManager {
      if (e.x3 != null && e.y3 != null && d.time3 != null && d.price3 != null) {
@@ -3971,7 +4039,7 @@ index 43c6bf6..19a35fe 100644
 +    }
      return out;
    }
- 
+
 diff --git a/src/lib/chart-plugins/drawing-tools/renderers.ts b/src/lib/chart-plugins/drawing-tools/renderers.ts
 index 71f3634..d4da443 100644
 --- a/src/lib/chart-plugins/drawing-tools/renderers.ts
@@ -3979,7 +4047,7 @@ index 71f3634..d4da443 100644
 @@ -18,6 +18,60 @@ function hexToRgba(hex: string, alpha: number): string {
    return `rgba(${parseInt(m[1]!, 16)}, ${parseInt(m[2]!, 16)}, ${parseInt(m[3]!, 16)}, ${alpha})`;
  }
- 
+
 +export interface DrawingPresentation {
 +  strokeColor: string;
 +  fillColor: string;
@@ -4214,7 +4282,7 @@ index 71f3634..d4da443 100644
 +    if (e.d.text) drawLabelBox(scope, at.x + size, at.y, e.d.text.split("\n"), e.d.color);
 +  }
  }
- 
+
  // ── Parity tools: vertical / channel / shapes / text ─────────────────────────
 @@ -133,7 +353,7 @@ function renderVertical(scope: BitmapCoordinatesRenderingScope, e: ResolvedEntry
      scope,
@@ -4291,7 +4359,7 @@ index 71f3634..d4da443 100644
 -  return `${style}${weight}${Math.round(sizePx)}px sans-serif`;
 +  return `${style}${weight}${Math.round(sizePx)}px ${TRADINGVIEW_FONT_FAMILY}`;
  }
- 
+
 +const TRADINGVIEW_FONT_FAMILY = `-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif`;
 +
  function renderText(scope: BitmapCoordinatesRenderingScope, e: ResolvedEntry): void {
@@ -4307,29 +4375,29 @@ index 71f3634..d4da443 100644
 -  const at = toBitmap(scope, e.x1, e.y1);
    const lineH = size * 1.3;
    const pad = 4 * hpr;
- 
+
    ctx.save();
    ctx.font = textFont(e.d, size);
    ctx.textBaseline = "top";
 +  const presentation = drawingPresentation(e.d);
 +  ctx.textAlign = presentation.textAlign;
- 
+
    const textW = Math.max(...lines.map((l) => ctx.measureText(l).width));
    const boxW = textW + pad * 2;
    const boxH = lines.length * lineH + pad * 2;
 -  const bx = at.x - pad;
 +  const bx = presentation.textAlign === "center" ? at.x - textW / 2 - pad : presentation.textAlign === "right" ? at.x - textW - pad : at.x - pad;
    const by = at.y - pad;
- 
+
    if (e.d.textBg) {
 @@ -286,7 +517,7 @@ function renderText(scope: BitmapCoordinatesRenderingScope, e: ResolvedEntry): v
      ctx.strokeRect(bx, by, boxW, boxH);
    }
- 
+
 -  ctx.fillStyle = e.d.color;
 +  ctx.fillStyle = presentation.strokeColor;
    lines.forEach((l, i) => ctx.fillText(l, at.x, at.y + i * lineH));
- 
+
    if (showHandles(e)) {
 @@ -312,14 +543,16 @@ function renderPosition(
    if (x1 === null || x2 === null || y1 === null || yStop == null || yTarget == null) return;
@@ -4352,7 +4420,7 @@ index 71f3634..d4da443 100644
 +    drawLabelBox(scope, at.x, at.y, lines, e.d.color, presentation.labelColor, e.d.fontSize);
    }
  }
- 
+
 @@ -330,12 +563,13 @@ function posZone(
    yFrom: number,
    yTo: number,
@@ -4371,7 +4439,7 @@ index 71f3634..d4da443 100644
 @@ -357,23 +591,38 @@ function renderPositionHandles(
    drawHandle(scope, toBitmap(scope, xb, y1), e.d.color);
  }
- 
+
 -function positionReadout(d: DrawingLine, info: DrawCtxInfo): string[] {
 +export function positionReadout(d: DrawingLine, info: Pick<DrawCtxInfo, "accountEquity" | "priceFormat">): string[] {
    if (d.stopPrice == null || d.targetPrice == null) return [];
@@ -4413,7 +4481,7 @@ index 71f3634..d4da443 100644
 +  if (d.statsMode === "all") return [heading, ...priceLines, ...amountLines];
 +  return [heading, ...priceLines, ...(amountLines.length ? [amountLines.at(-1)!] : [])];
  }
- 
+
  function signPct(v: number, entry: number): string {
 @@ -389,13 +638,15 @@ function drawLabelBox(
    y: number,
@@ -4506,7 +4574,7 @@ index 7671e1a..8349fa1 100644
 +import type { DrawingFibLevelStyle, DrawingLine } from "../../../pages/trading/constants";
  import type { EntryState, ResolvedEntry, ResolvedFibLevel } from "./types";
 +import { rangeStats } from "./geometry";
- 
+
  export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
  export const FIB_EXT_LEVELS = [0, 0.618, 1, 1.618, 2.618] as const;
 @@ -145,9 +146,47 @@ export function resolveEntry(d: DrawingLine, ctx: ResolveCtx, state: EntryState)
@@ -4533,7 +4601,7 @@ index 7671e1a..8349fa1 100644
 +  }
    return entry;
  }
- 
+
 +function rangeLabels(d: DrawingLine, ctx: ResolveCtx): string[] {
 +  const stats = rangeStats(
 +    d.time!, d.time2!, d.price, d.price2!, ctx.data.map((bar) => bar.time as number),
@@ -4597,16 +4665,16 @@ index dc48f04..de77d13 100644
 +  control?: { x: number; y: number } | null;
    state: EntryState;
  }
- 
+
 @@ -47,15 +51,15 @@ export interface DrawCtxInfo {
    priceFormat: (price: number) => string;
  }
- 
+
 -export type TimeKey = "time" | "time2" | "time3";
 -export type PriceKey = "price" | "price2" | "price3" | "stopPrice" | "targetPrice";
 +export type TimeKey = "time" | "time2" | "time3" | "controlTime";
 +export type PriceKey = "price" | "price2" | "price3" | "controlPrice" | "stopPrice" | "targetPrice";
- 
+
  /**
   * Where a hit landed on a drawing: a draggable anchor point (which may move
   * only one axis, e.g. a horizontal line's price) or the drawing body.
@@ -4615,7 +4683,7 @@ index dc48f04..de77d13 100644
 -  | { kind: "point"; timeKey: TimeKey | null; priceKey: PriceKey | null }
 +  | { kind: "point"; timeKey: TimeKey | null; priceKey: PriceKey | null; pointIndex?: number }
    | { kind: "body" };
- 
+
  export interface Hit {
 diff --git a/src/lib/chart-resize.ts b/src/lib/chart-resize.ts
 new file mode 100644
@@ -4664,11 +4732,11 @@ index 2ff483f..c22d52f 100644
 +      y: Math.max(8, Math.min(y, window.innerHeight - rect.height - 8)),
      });
    }, [x, y]);
- 
+
 @@ -165,11 +166,11 @@ export function ChartContextMenu(props: ChartContextMenuProps) {
      return () => window.removeEventListener("keydown", onKey);
    }, [onClose]);
- 
+
 -  return (
 -    <>
 +  return createPortal(
@@ -4698,7 +4766,7 @@ index 2ff483f..c22d52f 100644
    );
  }
 diff --git a/src/pages/trading/ChartPanel.tsx b/src/pages/trading/ChartPanel.tsx
-index 8de4807..fb6e42f 100644
+index 8de4807..662e650 100644
 --- a/src/pages/trading/ChartPanel.tsx
 +++ b/src/pages/trading/ChartPanel.tsx
 @@ -1,7 +1,7 @@
@@ -4734,13 +4802,13 @@ index 8de4807..fb6e42f 100644
 @@ -75,6 +82,8 @@ import {
    toUnixSeconds,
  } from "./utils.ts";
- 
+
 +const TRADINGVIEW_FONT_FAMILY = `-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif`;
 +
  // ── Staleness recovery ─────────────────────────────────────────────────────
  // Shared by the live-candle and tick-smoothing effects so either path can
  // trigger a REST refetch when the chart falls more than 1.5 intervals behind
-@@ -269,6 +278,16 @@ export interface ChartPanelProps {
+@@ -269,6 +278,18 @@ export interface ChartPanelProps {
     * staleness watchdog must not treat the old last-bar as a data gap.
     */
    isReplaying?: boolean;
@@ -4752,15 +4820,17 @@ index 8de4807..fb6e42f 100644
 +  keyboardEnabled?: boolean;
 +  showDrawingTools?: boolean;
 +  drawingRailHost?: HTMLElement | null;
++  favoriteDrawingTools?: DrawingTool[];
++  onFavoriteDrawingToggle?: (tool: DrawingTool) => void;
 +  onMagnetToggle?: () => void;
 +  onStayInDrawingModeToggle?: () => void;
  }
- 
+
  // ── Chart plugin overlays ─────────────────────────────────────────────────────
-@@ -319,6 +338,93 @@ function buildPlugin(id: string, ctx: PluginBuildCtx): ISeriesPrimitive<Time> |
+@@ -319,6 +340,93 @@ function buildPlugin(id: string, ctx: PluginBuildCtx): ISeriesPrimitive<Time> |
    return PLUGIN_FACTORIES[id]?.(ctx) ?? null;
  }
- 
+
 +function chartOptionsForPanel(
 +  prefs: ReturnType<typeof useChartPreferences>,
 +  colors: ChartColors,
@@ -4851,21 +4921,21 @@ index 8de4807..fb6e42f 100644
  // Shared OHLCV legend shape — derive the percent change once at the call site
  // so the crosshair, candle, and tick paths all produce identical legend objects.
  interface OhlcvLegend {
-@@ -328,11 +434,12 @@ interface OhlcvLegend {
+@@ -328,11 +436,12 @@ interface OhlcvLegend {
    c: number;
    v: number;
    change: number;
 +  color?: string;
  }
- 
+
  function candleToLegend(c: CandlestickData<Time>, volume: number): OhlcvLegend {
    const change = c.open ? ((c.close - c.open) / c.open) * 100 : 0;
 -  return { o: c.open, h: c.high, l: c.low, c: c.close, v: volume, change };
 +  return { o: c.open, h: c.high, l: c.low, c: c.close, v: volume, change, color: c.color };
  }
- 
+
  // ── Real-time series update helpers ──────────────────────────────────────────
-@@ -356,6 +463,16 @@ interface RtCtx {
+@@ -356,6 +465,16 @@ interface RtCtx {
    series: ISeriesApi<"Candlestick">;
    volume: ISeriesApi<"Histogram"> | null;
    lastCandle: Ref<CandlestickData<Time> | null>;
@@ -4882,10 +4952,10 @@ index 8de4807..fb6e42f 100644
    liveCandleTs: Ref<number>;
    legendVol: Ref<number>;
    gapAt: Ref<number>;
-@@ -369,6 +486,22 @@ interface RtCtx {
+@@ -369,6 +488,22 @@ interface RtCtx {
    setLegend: Dispatch<SetStateAction<OhlcvLegend | null>>;
  }
- 
+
 +function withPreviousCloseColors(
 +  bar: CandlestickData<Time>,
 +  previousClose: number | null,
@@ -4905,7 +4975,7 @@ index 8de4807..fb6e42f 100644
  function intervalSecOf(tf: Timeframe): number {
    return (TF_INTERVAL_MS[tf] ?? 60_000) / 1000;
  }
-@@ -392,16 +525,19 @@ function paintServerVolume(live: LiveCandleData, barTime: Time, ctx: RtCtx): voi
+@@ -392,16 +527,19 @@ function paintServerVolume(live: LiveCandleData, barTime: Time, ctx: RtCtx): voi
  function applyServerCandle(live: LiveCandleData, ctx: RtCtx): void {
    const ts = toUnixSeconds(live.timestamp);
    if (Number.isNaN(ts) || ts <= 0 || !ctx.lastCandle.current) return;
@@ -4928,7 +4998,7 @@ index 8de4807..fb6e42f 100644
    ctx.lastCandle.current = bar;
    ctx.liveCandleTs.current = toUnixMs(live.timestamp);
    try {
-@@ -475,8 +611,10 @@ function applyTick(tick: TickData, ctx: RtCtx): void {
+@@ -475,8 +613,10 @@ function applyTick(tick: TickData, ctx: RtCtx): void {
    const mid = (tick.bid + tick.ask) / 2;
    const bucketTime = getCandleBucketTime(tickMs, ctx.timeframe) as Time;
    const isContinuation = prev.time === bucketTime;
@@ -4941,7 +5011,7 @@ index 8de4807..fb6e42f 100644
    ctx.lastCandle.current = bar;
    try {
      ctx.series.update(bar);
-@@ -627,14 +765,20 @@ function scrollOrFit(chart: IChartApi | null, barCount: number): void {
+@@ -627,14 +767,20 @@ function scrollOrFit(chart: IChartApi | null, barCount: number): void {
  // Re-apply the latest live bar after a periodic refetch (viewport preserved).
  function reapplyLive(live: LiveCandleData | undefined, ctx: RtCtx): void {
    if (!live) return;
@@ -4962,9 +5032,9 @@ index 8de4807..fb6e42f 100644
    ctx.lastCandle.current = bar;
 +  ctx.setLegend(candleToLegend(bar, live.volume || 0));
  }
- 
+
  // Replay the buffered live candle immediately after history is painted so the
-@@ -650,10 +794,17 @@ function replayBufferedLive(
+@@ -650,10 +796,17 @@ function replayBufferedLive(
    if (Number.isNaN(liveTs) || liveTs <= 0 || liveTs < lastHistBarSec) return;
    const liveBar = liveBarFrom(buffered);
    if (!liveBar) return;
@@ -4984,7 +5054,7 @@ index 8de4807..fb6e42f 100644
    } catch {
      /* safe to ignore — timestamp may be older than series */
    }
-@@ -871,23 +1022,21 @@ function OhlcvCell({
+@@ -871,45 +1024,55 @@ function OhlcvCell({
    label,
    value,
    digits,
@@ -5010,12 +5080,13 @@ index 8de4807..fb6e42f 100644
 +        className={bold ? "font-semibold" : "font-medium"}
 +        style={{ color }}
        >
-         {value.toFixed(digits)}
+-        {value.toFixed(digits)}
++        {value.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}
        </span>
-@@ -895,21 +1044,33 @@ function OhlcvCell({
+     </>
    );
  }
- 
+
 -function OhlcvLegendRow({ legend, pipDigits }: { legend: OhlcvLegend; pipDigits: number }) {
 -  const up = legend.c >= legend.o;
 +export function OhlcvLegendRow({
@@ -5059,7 +5130,7 @@ index 8de4807..fb6e42f 100644
          <>
            <span className="text-muted-foreground/70">V</span>
            <span className="text-foreground/60">{legend.v.toLocaleString()}</span>
-@@ -922,7 +1083,7 @@ function OhlcvLegendRow({ legend, pipDigits }: { legend: OhlcvLegend; pipDigits:
+@@ -922,7 +1085,7 @@ function OhlcvLegendRow({ legend, pipDigits }: { legend: OhlcvLegend; pipDigits:
  function BidAskRow({ tick, pipDigits }: { tick: TickData; pipDigits: number }) {
    const spread = ((tick.ask - tick.bid) * 10 ** pipDigits).toFixed(1);
    return (
@@ -5068,8 +5139,8 @@ index 8de4807..fb6e42f 100644
        <span className="text-muted-foreground/50">Bid</span>
        <span className="text-[#0ecb81]/80">{tick.bid.toFixed(pipDigits)}</span>
        <span className="text-muted-foreground/50">Ask</span>
-@@ -935,7 +1096,7 @@ function BidAskRow({ tick, pipDigits }: { tick: TickData; pipDigits: number }) {
- 
+@@ -935,7 +1098,7 @@ function BidAskRow({ tick, pipDigits }: { tick: TickData; pipDigits: number }) {
+
  // Symbol / timeframe / OHLCV / countdown header in the chart's top-left corner.
  // Extracted so the visibility branching doesn't inflate ChartPanel's CC.
 -function ChartLegendHeader({
@@ -5077,7 +5148,7 @@ index 8de4807..fb6e42f 100644
    selectedSymbol,
    timeframe,
    legend,
-@@ -944,6 +1105,11 @@ function ChartLegendHeader({
+@@ -944,6 +1107,11 @@ function ChartLegendHeader({
    pipDigits,
    showOhlcLegend,
    showCountdown,
@@ -5089,7 +5160,7 @@ index 8de4807..fb6e42f 100644
  }: {
    selectedSymbol: string;
    timeframe: Timeframe;
-@@ -953,15 +1119,34 @@ function ChartLegendHeader({
+@@ -953,15 +1121,34 @@ function ChartLegendHeader({
    pipDigits: number;
    showOhlcLegend: boolean;
    showCountdown: boolean;
@@ -5130,7 +5201,7 @@ index 8de4807..fb6e42f 100644
          {countdown && showCountdown && (
            <span className="text-muted-foreground/60 flex items-center gap-0.5">
              <Clock className="h-2.5 w-2.5 opacity-50" />
-@@ -979,8 +1164,11 @@ function ChartLegendHeader({
+@@ -979,8 +1166,11 @@ function ChartLegendHeader({
  // Extracted so the selection branching doesn't inflate ChartPanel's CC.
  function DrawingOverlays({
    drawing,
@@ -5142,7 +5213,7 @@ index 8de4807..fb6e42f 100644
    onUpdate,
    onClone,
    onRemove,
-@@ -988,8 +1176,11 @@ function DrawingOverlays({
+@@ -988,8 +1178,11 @@ function DrawingOverlays({
    onCloseSettings,
  }: {
    drawing: DrawingLine | null;
@@ -5154,7 +5225,7 @@ index 8de4807..fb6e42f 100644
    onUpdate: (d: DrawingLine) => void;
    onClone: () => void;
    onRemove: () => void;
-@@ -1002,15 +1193,18 @@ function DrawingOverlays({
+@@ -1002,15 +1195,18 @@ function DrawingOverlays({
        <DrawingSettingsDialog
          drawing={drawing}
          currentTf={currentTf}
@@ -5175,7 +5246,7 @@ index 8de4807..fb6e42f 100644
        onUpdate={onUpdate}
        onClone={onClone}
        onRemove={onRemove}
-@@ -1112,6 +1306,14 @@ export function ChartPanel({
+@@ -1112,6 +1308,16 @@ export function ChartPanel({
    onClearDrawings,
    onClearIndicators,
    isReplaying = false,
@@ -5185,12 +5256,14 @@ index 8de4807..fb6e42f 100644
 +  keyboardEnabled = true,
 +  showDrawingTools = true,
 +  drawingRailHost,
++  favoriteDrawingTools,
++  onFavoriteDrawingToggle,
 +  onMagnetToggle,
 +  onStayInDrawingModeToggle,
  }: ChartPanelProps) {
    const queryClient = useQueryClient();
    const lastGapRefetchAtRef = useRef<number>(0);
-@@ -1160,20 +1362,39 @@ export function ChartPanel({
+@@ -1160,20 +1366,39 @@ export function ChartPanel({
    const [countdown, setCountdown] = useState("");
    const countdownIntervalMs = TF_INTERVAL_MS[timeframe];
    const countdownText =
@@ -5200,7 +5273,7 @@ index 8de4807..fb6e42f 100644
    // left the series — prevents re-setting (and re-rendering) on every off-series
    // mouse move while the cursor sits outside the plotted data.
    const legendRestoredRef = useRef(true);
- 
+
    const chartPrefs = useChartPreferences();
 +  const themeColors = isDark ? CHART_COLORS.dark : CHART_COLORS.light;
    // Theme palette with the user's Chart Settings color overrides applied.
@@ -5230,10 +5303,10 @@ index 8de4807..fb6e42f 100644
 +    bullWick: candleSeriesSettings.wickUpColor ?? themeColors.up,
 +    bearWick: candleSeriesSettings.wickDownColor ?? themeColors.down,
 +  };
- 
+
    // Scroll-loaded history is tagged with the view it belongs to, so a symbol
    // or timeframe change drops it during render rather than from a reset effect
-@@ -1198,6 +1419,10 @@ export function ChartPanel({
+@@ -1198,6 +1423,10 @@ export function ChartPanel({
    // ── Drawing selection (floating toolbar / settings dialog / object tree) ──
    const [selectedDrawingIds, setSelectedDrawingIds] = useState<string[]>([]);
    const [showDrawingSettings, setShowDrawingSettings] = useState(false);
@@ -5243,8 +5316,8 @@ index 8de4807..fb6e42f 100644
 +  } | null>(null);
    const [showObjectTree, setShowObjectTree] = useState(false);
    const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
- 
-@@ -1222,10 +1447,56 @@ export function ChartPanel({
+
+@@ -1222,10 +1451,56 @@ export function ChartPanel({
    // Drawings actually shown on this chart: not hidden, and either visible on
    // all timeframes or scoped to the current one.
    const visibleDrawings = useMemo(
@@ -5252,7 +5325,7 @@ index 8de4807..fb6e42f 100644
 +    () => drawings.filter((d) => !d.hidden && isDrawingVisibleOnTimeframe(d, timeframe)),
      [drawings, timeframe],
    );
- 
+
 +  const updateDrawingToolbarGeometry = useCallback(() => {
 +    const drawing = selectedDrawing;
 +    const container = containerRef.current;
@@ -5302,7 +5375,7 @@ index 8de4807..fb6e42f 100644
    // Stable refs so the chart-create effect doesn't re-run on every parent render
    // when these props are unstable (e.g. inline onAddDrawing).
    const drawingToolRef = useRef(drawingTool);
-@@ -1289,6 +1560,9 @@ export function ChartPanel({
+@@ -1289,6 +1564,9 @@ export function ChartPanel({
        id: crypto.randomUUID(),
        time: d.time != null ? d.time + offsetSec : undefined,
        time2: d.time2 != null ? d.time2 + offsetSec : undefined,
@@ -5311,8 +5384,8 @@ index 8de4807..fb6e42f 100644
 +      points: d.points?.map((point) => ({ ...point, time: point.time + offsetSec })),
      });
    }, [selectedDrawing, timeframe, onAddDrawing]);
- 
-@@ -1318,7 +1592,23 @@ export function ChartPanel({
+
+@@ -1318,7 +1596,23 @@ export function ChartPanel({
        historicalExtra.view === `${selectedSymbol}:${timeframe}` ? historicalExtra.bars : [];
      return extra.length === 0 ? candles : [...extra, ...candles];
    }, [historicalExtra, candles, selectedSymbol, timeframe]);
@@ -5334,13 +5407,13 @@ index 8de4807..fb6e42f 100644
 +  }, [safeChartData, chartPrefs.colorBarsByPreviousClose, candleRenderColors.bullBody,
 +    candleRenderColors.bearBody, candleRenderColors.bullBorder, candleRenderColors.bearBorder,
 +    candleRenderColors.bullWick, candleRenderColors.bearWick]);
- 
+
    const {
      newsConfig,
-@@ -1462,100 +1752,23 @@ export function ChartPanel({
+@@ -1462,100 +1756,23 @@ export function ChartPanel({
    useEffect(() => {
      if (!containerRef.current) return;
- 
+
 -    const minMove = getMinMove(pipDigits);
 -
 -    const chart = createChart(containerRef.current, {
@@ -5416,9 +5489,9 @@ index 8de4807..fb6e42f 100644
 +      containerRef.current,
 +      chartOptionsForPanel(chartPrefs, themeColors, timeframeRef.current, selectedSymbol),
 +    );
- 
+
      chartRef.current = chart;
- 
+
      const candleSeries = chart.addCandlestickSeries({
 -      upColor: colors.up,
 -      downColor: colors.down,
@@ -5445,7 +5518,7 @@ index 8de4807..fb6e42f 100644
        priceLineWidth: 1,
        priceLineColor: "",
        priceLineStyle: LineStyle.Dotted,
-@@ -1587,15 +1800,9 @@ export function ChartPanel({
+@@ -1587,15 +1804,9 @@ export function ChartPanel({
      });
 
      // Handle resize
@@ -5463,12 +5536,12 @@ index 8de4807..fb6e42f 100644
 
      // Interactive drawing layer (place / preview / select / drag / delete) —
      // callbacks go through refs so the create-effect doesn't depend on them.
-@@ -1661,11 +1868,13 @@ export function ChartPanel({
- 
+@@ -1661,11 +1872,13 @@ export function ChartPanel({
+
      // Signal listener-binding hooks that a live chart instance now exists.
      setChartEpoch((e) => e + 1);
 +    onChartReady?.({ chart, series: candleSeries });
- 
+
      return () => {
 +      onChartReady?.(null);
        historyLoadCancelled = true;
@@ -5478,7 +5551,7 @@ index 8de4807..fb6e42f 100644
        drawingManager.destroy();
        drawingManagerRef.current = null;
        setSelectedDrawingIds([]);
-@@ -1695,82 +1904,37 @@ export function ChartPanel({
+@@ -1695,82 +1908,37 @@ export function ChartPanel({
    }, [
      isDark,
      pipDigits,
@@ -5494,7 +5567,7 @@ index 8de4807..fb6e42f 100644
 +  ]); // Preference-only appearance changes are applied in place below; the
    // chart persists across TF switches so drawings never blink out; the
    // TF-change effect below updates the live state in place, TradingView-style).
- 
+
 -  // Update watermark text when symbol changes (visibility comes from settings)
 -  useEffect(() => {
 -    chartRef.current?.applyOptions({
@@ -5509,7 +5582,7 @@ index 8de4807..fb6e42f 100644
 -    });
 -  }, [selectedSymbol, colors.watermark, chartPrefs.showWatermark, chartEpoch]);
 +  useEffect(() => { drawingManagerRef.current?.setKeyboardEnabled(keyboardEnabled); }, [keyboardEnabled, chartEpoch]);
- 
+
 -  // ── Live appearance settings (no chart recreation) ──
 +  // Apply the shared workspace settings to the existing chart and series.
 +  // Updating options in place keeps the user's horizontal and vertical view.
@@ -5548,7 +5621,7 @@ index 8de4807..fb6e42f 100644
 +    selectedSymbol,
      chartEpoch,
    ]);
- 
+
 -  useEffect(() => {
 -    volumeSeriesRef.current?.applyOptions({ visible: chartPrefs.showVolume });
 -  }, [chartPrefs.showVolume, chartEpoch]);
@@ -5577,15 +5650,15 @@ index 8de4807..fb6e42f 100644
      drawingManagerRef.current?.updateTimeframe(
        timeframe,
        (TF_INTERVAL_MS[timeframe] ?? 60_000) / 1000,
-@@ -1779,6 +1943,7 @@ export function ChartPanel({
- 
+@@ -1779,6 +1947,7 @@ export function ChartPanel({
+
    // ── Refs for smooth real-time streaming ────────────────
    const lastCandleRef = useRef<CandlestickData<Time> | null>(null);
 +  const previousCloseRef = useRef<number | null>(null);
    const lastLoadKeyRef = useRef<string>("");
    const latestLiveCandleRef = useRef<typeof liveCandle | undefined>(undefined);
    // Authoritative server candle timestamp, normalised to unix MILLISECONDS —
-@@ -1800,6 +1965,9 @@ export function ChartPanel({
+@@ -1800,6 +1969,9 @@ export function ChartPanel({
        series,
        volume: volumeSeriesRef.current,
        lastCandle: lastCandleRef,
@@ -5595,7 +5668,7 @@ index 8de4807..fb6e42f 100644
        liveCandleTs: liveCandleTsRef,
        legendVol: legendVolRef,
        gapAt: lastGapRefetchAtRef,
-@@ -1812,7 +1980,19 @@ export function ChartPanel({
+@@ -1812,7 +1984,19 @@ export function ChartPanel({
        qc: queryClient,
        setLegend,
      }),
@@ -5614,9 +5687,9 @@ index 8de4807..fb6e42f 100644
 +      candleRenderColors.bearWick,
 +    ],
    );
- 
+
    // Keep latest live candle in a ref (avoids stale closure in setData effect)
-@@ -1836,6 +2016,10 @@ export function ChartPanel({
+@@ -1836,6 +2020,10 @@ export function ChartPanel({
      // sync around it would buy nothing but risk.
      // eslint-disable-next-line react-hooks/immutability
      lastCandleRef.current = chartData[chartData.length - 1] ?? null;
@@ -5625,9 +5698,9 @@ index 8de4807..fb6e42f 100644
 +    previousCloseRef.current =
 +      chartData.length > 1 ? chartData[chartData.length - 2]?.close ?? null : null;
      setLegend(legendFromSeries(chartData, volumeData));
- 
+
      const buffered = latestLiveCandleRef.current;
-@@ -1990,6 +2174,11 @@ export function ChartPanel({
+@@ -1990,6 +2178,11 @@ export function ChartPanel({
          pipDigits={pipDigits}
          showOhlcLegend={chartPrefs.showOhlcLegend}
          showCountdown={chartPrefs.showCountdown}
@@ -5637,9 +5710,9 @@ index 8de4807..fb6e42f 100644
 +        showVolume={chartPrefs.showStatusLineVolume}
 +        isReplaying={isReplaying}
        />
- 
+
        {/* Drag-to-edit tooltip */}
-@@ -2019,8 +2208,17 @@ export function ChartPanel({
+@@ -2019,8 +2212,17 @@ export function ChartPanel({
        {/* Selected-drawing floating toolbar / settings dialog */}
        <DrawingOverlays
          drawing={selectedDrawing}
@@ -5657,30 +5730,30 @@ index 8de4807..fb6e42f 100644
          onUpdate={(d) => onUpdateDrawing?.(d)}
          onClone={handleCloneDrawing}
          onRemove={() => selectedDrawing && onRemoveDrawing?.(selectedDrawing.id)}
-@@ -2062,7 +2260,7 @@ export function ChartPanel({
+@@ -2062,7 +2264,7 @@ export function ChartPanel({
        />
- 
+
        {/* News overlay (popup, config dialog, button) */}
 -      <NewsOverlay
 +      {showNews && <NewsOverlay
          newsConfig={newsConfig}
          setNewsConfig={setNewsConfig}
          showNewsConfigDialog={showNewsConfigDialog}
-@@ -2072,7 +2270,7 @@ export function ChartPanel({
+@@ -2072,7 +2274,7 @@ export function ChartPanel({
          isDark={isDark}
          pipDigits={pipDigits}
          containerRef={containerRef}
 -      />
 +      />}
- 
+
        {/* Chart-wide right-click menu (TradingView-style) */}
        {chartMenu && (
-@@ -2112,7 +2310,7 @@ export function ChartPanel({
+@@ -2112,7 +2314,7 @@ export function ChartPanel({
        <div ref={containerRef} className="w-full h-full" onContextMenu={handleChartContextMenu} />
- 
+
        {/* Left vertical tool rail (TradingView-style grouped flyouts) */}
 -      <DrawingToolRail drawingTool={drawingTool} onDrawingTool={(t) => onDrawingToolSelect?.(t)} />
-+      {showDrawingTools && (drawingRailHost ? createPortal(<DrawingToolRail drawingTool={drawingTool} onDrawingTool={(t) => onDrawingToolSelect?.(t)} magnetActive={magnetMode !== "none"} onMagnetToggle={onMagnetToggle} stayActive={stayInDrawingMode} onStayToggle={onStayInDrawingModeToggle} />, drawingRailHost) : <DrawingToolRail drawingTool={drawingTool} onDrawingTool={(t) => onDrawingToolSelect?.(t)} magnetActive={magnetMode !== "none"} onMagnetToggle={onMagnetToggle} stayActive={stayInDrawingMode} onStayToggle={onStayInDrawingModeToggle} />)}
++      {showDrawingTools && (drawingRailHost ? createPortal(<DrawingToolRail drawingTool={drawingTool} onDrawingTool={(t) => onDrawingToolSelect?.(t)} magnetActive={magnetMode !== "none"} onMagnetToggle={onMagnetToggle} stayActive={stayInDrawingMode} onStayToggle={onStayInDrawingModeToggle} favoriteTools={favoriteDrawingTools} onFavoriteToggle={onFavoriteDrawingToggle} />, drawingRailHost) : <DrawingToolRail drawingTool={drawingTool} onDrawingTool={(t) => onDrawingToolSelect?.(t)} magnetActive={magnetMode !== "none"} onMagnetToggle={onMagnetToggle} stayActive={stayInDrawingMode} onStayToggle={onStayInDrawingModeToggle} favoriteTools={favoriteDrawingTools} onFavoriteToggle={onFavoriteDrawingToggle} />)}
      </div>
    );
  }
@@ -5730,7 +5803,7 @@ index c117dcb..81da16b 100644
 +import { StatusLineTab } from "./chart-settings/StatusLineTab.tsx";
 +import { SymbolTab } from "./chart-settings/SymbolTab.tsx";
 +import "./chart-settings/settings.css";
- 
+
  export interface ChartSettingsDialogProps {
    open: boolean;
 @@ -28,550 +28,270 @@ export interface ChartSettingsDialogProps {
@@ -5740,10 +5813,10 @@ index c117dcb..81da16b 100644
 -  /** Whether the account has challenge metrics (controls the Challenge tab note). */
    hasAccount: boolean;
  }
- 
+
 -type TabId = "appearance" | "colors" | "trading" | "events" | "challenge";
 +type TabId = "symbol" | "status-line" | "scales-and-lines" | "canvas";
- 
+
 -const TABS: Array<{ id: TabId; label: string; icon: ReactNode }> = [
 -  { id: "appearance", label: "Appearance", icon: <CandlestickChart className="h-3.5 w-3.5" /> },
 -  { id: "colors", label: "Colors", icon: <Palette className="h-3.5 w-3.5" /> },
@@ -5756,7 +5829,7 @@ index c117dcb..81da16b 100644
 +  { id: "scales-and-lines" as const, label: "Scales and lines", icon: Scaling },
 +  { id: "canvas" as const, label: "Canvas", icon: Paintbrush },
  ];
- 
+
 -/** Per-tab "Reset to defaults" payloads. Events tab has none (plugin-driven). */
 -const RESET_BY_TAB: Partial<Record<TabId, Partial<ChartPreferences>>> = {
 -  appearance: {
@@ -5842,7 +5915,7 @@ index c117dcb..81da16b 100644
 +    timeScaleRightOffset: "default",
    },
  };
- 
+
 -function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
 -  // In-flow flex knob with explicit p-0/border-0 — relying on absolute
 -  // positioning let the browser's default button padding push the knob off
@@ -5893,7 +5966,7 @@ index c117dcb..81da16b 100644
 +function tabId(id: TabId): string {
 +  return `chart-settings-tab-${id}`;
  }
- 
+
 -function ColorSwatch({
 -  value,
 -  fallback,
@@ -5914,7 +5987,7 @@ index c117dcb..81da16b 100644
 +function panelId(id: TabId): string {
 +  return `chart-settings-panel-${id}`;
  }
- 
+
 -function ColorRow({
 -  label,
 -  value,
@@ -5957,7 +6030,7 @@ index c117dcb..81da16b 100644
 +  const [templates, setTemplates] = useState<ChartSettingsTemplate[]>([]);
 +  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
 +  const [templateName, setTemplateName] = useState("");
- 
+
 -/** Two swatches on one row (e.g. long/short, up/down). */
 -function ColorPairRow({
 -  label,
@@ -5984,7 +6057,7 @@ index c117dcb..81da16b 100644
 +    dialog.close();
 +    nativeDialogClosedRef.current = true;
 +  };
- 
+
 -function SectionTitle({ children }: { children: ReactNode }) {
 -  return (
 -    <div className="mb-1 mt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground first:mt-0">
@@ -6019,7 +6092,7 @@ index c117dcb..81da16b 100644
 +      if (openerRef.current?.isConnected) openerRef.current.focus();
 +    };
 +  }, [open]);
- 
+
 -function AppearanceTab({ prefs }: { prefs: ChartPreferences }) {
 -  const set = updateChartPreferences;
 -  return (
@@ -6068,7 +6141,7 @@ index c117dcb..81da16b 100644
 +    setDraft(next);
 +    setChartPreferencesPreview(next);
 +  };
- 
+
 -function ElementColorRows({ prefs, theme }: { prefs: ChartPreferences; theme: ChartColors }) {
 -  const set = updateChartPreferences;
 -  return (
@@ -6108,7 +6181,7 @@ index c117dcb..81da16b 100644
 +    onClose();
 +    if (openerRef.current?.isConnected) openerRef.current.focus();
 +  };
- 
+
 -function LineColorRows({ prefs, theme }: { prefs: ChartPreferences; theme: ChartColors }) {
 -  const set = updateChartPreferences;
 -  return (
@@ -6167,7 +6240,7 @@ index c117dcb..81da16b 100644
 +    onClose();
 +    if (openerRef.current?.isConnected) openerRef.current.focus();
 +  };
- 
+
 -function ColorsTab({ prefs, isDark }: { prefs: ChartPreferences; isDark: boolean }) {
 -  const theme = isDark ? CHART_COLORS.dark : CHART_COLORS.light;
 -  const set = updateChartPreferences;
@@ -6204,7 +6277,7 @@ index c117dcb..81da16b 100644
 +    setTab(next.id);
 +    document.getElementById(tabId(next.id))?.focus();
 +  };
- 
+
 -function TradingTab({ prefs }: { prefs: ChartPreferences }) {
 -  const set = updateChartPreferences;
 -  return (
@@ -6231,7 +6304,7 @@ index c117dcb..81da16b 100644
 -  );
 -}
 +  const resetCurrentTab = () => changeDraft(RESET_BY_TAB[tab]);
- 
+
 -function EventsTab({
 -  activePlugins,
 -  onTogglePlugin,
@@ -6281,7 +6354,7 @@ index c117dcb..81da16b 100644
 +    changeDraft(template.preferences);
 +    setTemplateMenuOpen(false);
 +  };
- 
+
 -function ChallengeTab({ prefs, hasAccount }: { prefs: ChartPreferences; hasAccount: boolean }) {
 -  const set = updateChartPreferences;
 -  const master = prefs.challengeOverlay;
@@ -6326,7 +6399,7 @@ index c117dcb..81da16b 100644
 +    if (templateName.trim()) setTemplateName("");
 +    setTemplateMenuOpen(false);
 +  };
- 
+
 -function TabBody({
 -  tab,
 -  props,
@@ -6355,14 +6428,14 @@ index c117dcb..81da16b 100644
 +  const removeTemplate = (template: ChartSettingsTemplate) => {
 +    setTemplates(deleteChartSettingsTemplate(template.id));
 +  };
- 
+
 -export function ChartSettingsDialog(props: ChartSettingsDialogProps) {
 -  const { open, onClose } = props;
 -  const [tab, setTab] = useState<TabId>("appearance");
 -  const drag = useDragOffset();
    if (!open) return null;
 +  const ActiveTab = tab === "symbol" ? SymbolTab : tab === "status-line" ? StatusLineTab : tab === "scales-and-lines" ? ScalesAndLinesTab : CanvasTab;
- 
+
 -  const close = () => {
 -    drag.reset();
 -    onClose();
@@ -6526,7 +6599,7 @@ index dcc30b4..f274da9 100644
    }
 @@ -44,7 +44,7 @@ function snapshotContent(
  }
- 
+
  function contentToPrefsPatch(content: ChartTemplateContent): Partial<ChartPreferences> {
 -  const patch: Record<string, string | boolean> = {};
 +  const patch: Record<string, string | number | boolean> = {};
@@ -6582,13 +6655,13 @@ index 8141bfa..494c5fd 100644
  import { ReplayHUD } from "./ReplayHUD.tsx";
  import { getPipDigits } from "./utils.ts";
 +import { DRAWING_TOOL_GROUPS } from "./drawingToolCatalog.tsx";
- 
+
  export interface ChartToolbarProps {
    selectedSymbol: string;
 @@ -530,24 +516,17 @@ function PluginsDropdown({
    );
  }
- 
+
 -const DRAWING_TOOLS = [
 -  { tool: "horizontal" as const, icon: Minus, label: "Horizontal Line", shortcut: "Alt+H" },
 -  { tool: "trendline" as const, icon: TrendingUp, label: "Trendline", shortcut: "Alt+T" },
@@ -6618,14 +6691,14 @@ index 8141bfa..494c5fd 100644
 +const DRAWING_TOOLS = DRAWING_TOOL_GROUPS.flatMap((group) =>
 +  group.tools.map((tool) => ({ ...tool, shortcut: DRAWING_SHORTCUTS[tool.tool] ?? "" })),
 +);
- 
+
  function DrawingOptionToggle({
    icon: Icon,
 diff --git a/src/pages/trading/DrawingToolRail.tsx b/src/pages/trading/DrawingToolRail.tsx
-index e4ae382..054a5c1 100644
+index e4ae382..020300a 100644
 --- a/src/pages/trading/DrawingToolRail.tsx
 +++ b/src/pages/trading/DrawingToolRail.tsx
-@@ -1,91 +1,18 @@
+@@ -1,107 +1,44 @@
 +import { createPortal } from "react-dom";
  import {
 -  ArrowDownRight,
@@ -6651,8 +6724,10 @@ index e4ae382..054a5c1 100644
 -  TrendingUp,
 -  Triangle,
 -  Type,
++  Star,
  } from "lucide-react";
- import { useEffect, useRef, useState } from "react";
+-import { useEffect, useRef, useState } from "react";
++import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
  import { useDragOffset } from "../../hooks/useDragOffset.ts";
  import { cn } from "../../lib/utils.ts";
  import type { DrawingTool } from "./constants.ts";
@@ -6718,21 +6793,40 @@ index e4ae382..054a5c1 100644
 -  { id: "text", icon: Type, label: "Text", tools: [{ tool: "text", icon: Type, label: "Text" }] },
 -];
 +import { DRAWING_TOOL_GROUPS, type DrawingToolGroup } from "./drawingToolCatalog.tsx";
- 
+
  function RailButton({
    icon: Icon,
-@@ -102,6 +29,8 @@ function RailButton({
+   title,
+   active,
+   onClick,
++  menuOpen,
++  onKeyDown,
+ }: {
+   icon: LucideIcon;
+   title: string;
+   active?: boolean;
+   onClick: () => void;
++  menuOpen?: boolean;
++  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
+ }) {
+   return (
      <button
        type="button"
        title={title}
 +      aria-label={title}
 +      aria-pressed={active}
++      aria-haspopup={menuOpen === undefined ? undefined : "menu"}
++      aria-expanded={menuOpen}
++      onKeyDown={onKeyDown}
        onClick={onClick}
        className={cn(
          "p-1.5 rounded hover:bg-secondary",
-@@ -120,19 +49,21 @@ function RailGroup({
+@@ -119,25 +56,52 @@ function RailGroup({
+   open,
    onToggle,
    onSelect,
++  favoriteTools,
++  onFavoriteToggle,
  }: {
 -  group: ToolGroup;
 +  group: DrawingToolGroup;
@@ -6740,8 +6834,12 @@ index e4ae382..054a5c1 100644
    open: boolean;
    onToggle: () => void;
    onSelect: (t: DrawingTool) => void;
++  favoriteTools?: DrawingTool[];
++  onFavoriteToggle?: (t: DrawingTool) => void;
  }) {
 +  const anchor = useRef<HTMLDivElement>(null);
++  const menu = useRef<HTMLDivElement>(null);
++  useLayoutEffect(() => { if (open) menu.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus(); }, [open]);
 +  const [position, setPosition] = useState({left: 40, top: 50});
    const activeMeta = group.tools.find((t) => t.tool === activeTool);
    const Icon = activeMeta?.icon ?? group.icon;
@@ -6751,32 +6849,70 @@ index e4ae382..054a5c1 100644
 -      {open && (
 -        <div className="absolute left-full top-0 ml-1 z-30 min-w-[180px] rounded-md bg-card border border-border shadow-xl py-1">
 +    <div className="relative" ref={anchor}>
-+      <RailButton icon={Icon} title={group.label} active={Boolean(activeMeta)} onClick={() => {const r=anchor.current?.getBoundingClientRect(); if(r)setPosition({left:Math.max(8,Math.min(r.right+5,window.innerWidth-232)),top:Math.max(8,Math.min(r.top,window.innerHeight-group.tools.length*34-20))});onToggle();}} />
++      <RailButton icon={Icon} title={group.label} active={Boolean(activeMeta)} menuOpen={open}
++        onKeyDown={(event) => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); event.currentTarget.click(); } }}
++        onClick={() => {const r=anchor.current?.getBoundingClientRect(); if(r)setPosition({left:Math.max(8,Math.min(r.right+5,window.innerWidth-232)),top:Math.max(8,Math.min(r.top,window.innerHeight-group.tools.length*36-50))});onToggle();}} />
 +      {open && createPortal(
-+        <div className="opencharts" data-drawing-rail-menu style={{position:"fixed",left:position.left,top:position.top,right:"auto",bottom:"auto",width:"max-content",height:"auto",maxWidth:"calc(100vw - 16px)",zIndex:1000,maxHeight:"calc(100vh - 32px)",overflowY:"auto",background:"#202124",border:"1px solid #404040",borderRadius:4,minWidth:180,padding:"4px 0",boxShadow:"0 10px 30px #0008"}}>
++        <div ref={menu} className="opencharts" data-drawing-rail-menu role="menu" aria-label={group.label} onKeyDown={(event) => {
++          const inFavorites = (document.activeElement as HTMLElement | null)?.getAttribute('role') === 'menuitemcheckbox';
++          const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(inFavorites ? '[role="menuitemcheckbox"]' : '[role="menuitem"]'));
++          const index = items.indexOf(document.activeElement as HTMLButtonElement);
++          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onToggle(); anchor.current?.querySelector<HTMLButtonElement>("button")?.focus(); return; }
++          if (onFavoriteToggle && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
++            const row = (document.activeElement as HTMLElement | null)?.closest('[data-drawing-row]');
++            const target = row?.querySelector<HTMLButtonElement>(event.key === 'ArrowRight' ? '[role="menuitemcheckbox"]' : '[role="menuitem"]');
++            if (target) { event.preventDefault(); target.focus(); }
++            return;
++          }
++          if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
++            event.preventDefault();
++            const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
++            items[next]?.focus();
++          }
++        }} style={{position:"fixed",left:position.left,top:position.top,right:"auto",bottom:"auto",width:"max-content",height:"auto",maxWidth:"calc(100vw - 16px)",zIndex:1000,maxHeight:"calc(100vh - 32px)",overflowY:"auto",background:"#202124",border:"1px solid #404040",borderRadius:4,minWidth:180,padding:"4px 0",boxShadow:"0 10px 30px #0008"}}>
++          <div className="drawing-rail-menu-heading" aria-hidden="true">{group.label}</div>
            {group.tools.map((t) => (
-             <button
-               key={t.tool}
-@@ -147,7 +78,7 @@ function RailGroup({
+-            <button
+-              key={t.tool}
++            <div key={t.tool} data-drawing-row role="none" className="drawing-rail-menu-row">
++            <button role="menuitem" tabIndex={-1} data-drawing-tool={t.tool}
+               type="button"
+-              onClick={() => onSelect(t.tool)}
++              onClick={() => { onSelect(t.tool); anchor.current?.querySelector<HTMLButtonElement>("button")?.focus(); }}
+               className={cn(
+                 "w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-secondary text-left",
+                 activeTool === t.tool && "bg-secondary text-primary",
+@@ -146,19 +110,28 @@ function RailGroup({
+               <t.icon className="h-3.5 w-3.5 shrink-0" />
                {t.label}
              </button>
++            {onFavoriteToggle && <button type="button" role="menuitemcheckbox" tabIndex={-1} aria-label={`Favorite ${t.label}`} aria-checked={favoriteTools?.includes(t.tool) ?? false} title={`Favorite ${t.label}`} className="drawing-rail-favorite" onClick={() => onFavoriteToggle(t.tool)}><Star aria-hidden="true" /></button>}
++            </div>
            ))}
 -        </div>
 +        </div>, document.body
        )}
      </div>
    );
-@@ -156,7 +87,9 @@ function RailGroup({
+ }
+
++const RAIL_GROUP_ORDER = ["lines", "fib", "trade", "brushes", "shapes", "text", "measure"];
++const RAIL_GROUPS = [...DRAWING_TOOL_GROUPS].sort((a, b) => RAIL_GROUP_ORDER.indexOf(a.id) - RAIL_GROUP_ORDER.indexOf(b.id));
++
  export function DrawingToolRail({
    drawingTool,
    onDrawingTool,
 +  magnetActive = false, onMagnetToggle, stayActive = false, onStayToggle,
++  favoriteTools, onFavoriteToggle,
  }: {
 +  magnetActive?: boolean; onMagnetToggle?: () => void; stayActive?: boolean; onStayToggle?: () => void;
    drawingTool: DrawingTool;
    onDrawingTool: (t: DrawingTool) => void;
++  favoriteTools?: DrawingTool[]; onFavoriteToggle?: (t: DrawingTool) => void;
  }) {
-@@ -168,7 +101,7 @@ export function DrawingToolRail({
+   const [openGroup, setOpenGroup] = useState<string | null>(null);
+   const [hidden, setHidden] = useState(false);
+@@ -168,7 +141,7 @@ export function DrawingToolRail({
    useEffect(() => {
      if (!openGroup) return;
      const handler = (e: MouseEvent) => {
@@ -6785,16 +6921,21 @@ index e4ae382..054a5c1 100644
      };
      document.addEventListener("mousedown", handler);
      return () => document.removeEventListener("mousedown", handler);
-@@ -221,7 +154,7 @@ export function DrawingToolRail({
+@@ -221,7 +194,7 @@ export function DrawingToolRail({
            setOpenGroup(null);
          }}
        />
 -      {GROUPS.map((g) => (
-+      {DRAWING_TOOL_GROUPS.map((g) => (
++      {RAIL_GROUPS.map((g) => (
          <RailGroup
            key={g.id}
            group={g}
-@@ -232,6 +165,8 @@ export function DrawingToolRail({
+@@ -229,9 +202,13 @@ export function DrawingToolRail({
+           open={openGroup === g.id}
+           onToggle={() => setOpenGroup((o) => (o === g.id ? null : g.id))}
+           onSelect={select}
++          favoriteTools={favoriteTools}
++          onFavoriteToggle={onFavoriteToggle}
          />
        ))}
        <div className="my-0.5 w-full border-t border-border/50" />
@@ -6818,7 +6959,7 @@ index bb05e02..5500ffc 100644
 @@ -152,7 +153,7 @@ function LineStyleButtons({
    );
  }
- 
+
 -export function DrawingFloatingToolbar({
 +export function LegacyDrawingFloatingToolbar({
    drawing,
@@ -6827,12 +6968,12 @@ index bb05e02..5500ffc 100644
 @@ -251,7 +252,9 @@ function ExtendToggles({
    );
  }
- 
+
 -const FILLABLE = new Set(["rectangle", "ellipse", "triangle", "channel"]);
 +const FILLABLE = new Set([
 +  "rectangle", "ellipse", "triangle", "channel", "price-range", "date-range", "date-price-range",
 +]);
- 
+
  function FillControls({
    drawing,
 @@ -263,20 +266,12 @@ function FillControls({
@@ -6907,7 +7048,7 @@ index bb05e02..5500ffc 100644
 @@ -630,7 +609,7 @@ function StyleTools({
    );
  }
- 
+
 -export function DrawingSettingsDialog({
 +export function LegacyDrawingSettingsDialog({
    drawing,
@@ -6925,12 +7066,12 @@ index bb05e02..5500ffc 100644
 @@ -719,6 +698,9 @@ export function DrawingSettingsDialog({
    );
  }
- 
+
 +export { DrawingSettingsDialog } from "./drawing-settings/DrawingSettingsDialog.tsx";
 +export { DrawingFloatingToolbar } from "./drawing-settings/DrawingFloatingToolbar.tsx";
 +
  // ── Right-click context menu ─────────────────────────────────────────────────
- 
+
  export interface DrawingContextMenuProps {
 diff --git a/src/pages/trading/NewsOverlay.tsx b/src/pages/trading/NewsOverlay.tsx
 index 4f5a01f..bdd61fa 100644
@@ -6941,7 +7082,7 @@ index 4f5a01f..bdd61fa 100644
  import type { NewsOverlayConfig } from "./constants.ts";
  import type { NewsPopupState } from "./useNewsOverlay.ts";
 +import { TradingViewColorPicker } from "../../components/TradingViewColorPicker.tsx";
- 
+
  interface NewsOverlayProps {
    newsConfig: NewsOverlayConfig;
 @@ -216,11 +217,10 @@ export function NewsOverlay({
@@ -7581,10 +7722,10 @@ index 0000000..bff0762
 +}
 diff --git a/src/pages/trading/chartSettingsOptions.ts b/src/pages/trading/chartSettingsOptions.ts
 new file mode 100644
-index 0000000..45a05ab
+index 0000000..019b0e3
 --- /dev/null
 +++ b/src/pages/trading/chartSettingsOptions.ts
-@@ -0,0 +1,268 @@
+@@ -0,0 +1,284 @@
 +import {
 +  ColorType,
 +  LineStyle,
@@ -7629,12 +7770,12 @@ index 0000000..45a05ab
 +  return new Date(Date.UTC(time.year, time.month - 1, time.day));
 +}
 +
-+function dateParts(date: Date, timezone: string, locale: string, showWeekday: boolean): Record<string, string> {
++function dateParts(date: Date, timezone: string, locale: string, showWeekday: boolean, numericMonth = false): Record<string, string> {
 +  return Object.fromEntries(
 +    new Intl.DateTimeFormat(locale, {
 +      timeZone: timezone,
 +      year: "numeric",
-+      month: "short",
++      month: numericMonth ? "2-digit" : "short",
 +      day: "2-digit",
 +      ...(showWeekday ? { weekday: "short" as const } : {}),
 +    })
@@ -7684,7 +7825,7 @@ index 0000000..45a05ab
 +      ...(prefix ? { weekday: "short" as const } : {}),
 +    }).format(date);
 +  }
-+  const parts = dateParts(date, resolvedTimezone, locale, prefix);
++  const parts = dateParts(date, resolvedTimezone, locale, prefix, dateFormat === "yyyy-MM-dd");
 +  const formattedDate =
 +    dateFormat === "yyyy-MM-dd"
 +      ? `${parts.year}-${parts.month}-${parts.day}`
@@ -7741,8 +7882,22 @@ index 0000000..45a05ab
 +    prefs.timeScaleSecondsVisible === "auto"
 +      ? timeframe === "1m"
 +      : prefs.timeScaleSecondsVisible;
-+  const tickMarkFormatter: TickMarkFormatter = (time, tickMarkType, locale) =>
-+    formatChartTimeLabel(
++  const tickMarkFormatter: TickMarkFormatter = (time, tickMarkType, locale) => {
++    // A day tick already sits in the context of month/year ticks. Keep explicit
++    // date formats intact, but avoid repeating a full date for locale ticks.
++    if (tickMarkType === TickMarkType.DayOfMonth && prefs.timeScaleDateFormat === "locale") {
++      const date = dateForChartTime(time);
++      if (!date) return "";
++      const parts = new Intl.DateTimeFormat(locale, {
++        timeZone: timezone,
++        day: "numeric",
++        ...(prefs.timeScaleShowDayOfWeek ? { weekday: "short" as const } : {}),
++      }).formatToParts(date);
++      const day = parts.find((part) => part.type === "day")?.value ?? "";
++      const weekday = parts.find((part) => part.type === "weekday")?.value;
++      return weekday ? `${weekday} ${day}` : day;
++    }
++    return formatChartTimeLabel(
 +      time,
 +      timezone,
 +      prefs.timeScaleTimeFormat,
@@ -7751,6 +7906,7 @@ index 0000000..45a05ab
 +      tickMarkType,
 +      prefs.timeScaleShowDayOfWeek,
 +    );
++  };
 +  const chartBackground =
 +    prefs.chartBackgroundMode === "transparent"
 +      ? "rgba(0, 0, 0, 0)"
@@ -7837,6 +7993,7 @@ index 0000000..45a05ab
 +): DeepPartial<CandlestickSeriesOptions> {
 +  const precision = prefs.pricePrecision === "default" ? pipDigits : prefs.pricePrecision;
 +  const computedMinMove = prefs.pricePrecision === "default" ? minMove : 10 ** -precision;
++  const priceFormatter = new Intl.NumberFormat("en-US", { minimumFractionDigits: precision, maximumFractionDigits: precision });
 +
 +  return {
 +    upColor: prefs.candleBullBodyColor || colors.up,
@@ -7850,7 +8007,7 @@ index 0000000..45a05ab
 +    priceLineVisible: prefs.showPriceLine,
 +    lastValueVisible: prefs.showLastValue,
 +    priceScaleId: prefs.priceScaleSide,
-+    priceFormat: { type: "price", precision, minMove: computedMinMove },
++    priceFormat: { type: "custom", minMove: computedMinMove, formatter: (price: number) => priceFormatter.format(price) },
 +  };
 +}
 diff --git a/src/pages/trading/chartSettingsTemplates.ts b/src/pages/trading/chartSettingsTemplates.ts
@@ -7998,7 +8155,7 @@ index d7f5c15..1190b49 100644
 @@ -3,6 +3,16 @@
  export const TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"] as const;
  export type Timeframe = (typeof TIMEFRAMES)[number];
- 
+
 +/** View defaults match the existing OpenCharts viewport before chart settings are applied. */
 +export const CHART_SETTINGS_DEFAULTS = {
 +  displayTimezone: "Etc/UTC",
@@ -8013,7 +8170,7 @@ index d7f5c15..1190b49 100644
   * Master switch for session replay (HUD + scrubber). Backed by the demo replay
   * provider in services/demo/replay.ts: the buffer is the bundled 1m history for
 @@ -13,12 +23,12 @@ export const REPLAY_ENABLED = true;
- 
+
  export const CHART_COLORS = {
    dark: {
 -    background: "#0b0e14",
@@ -8056,12 +8213,12 @@ index d7f5c15..1190b49 100644
 +  | "date-price-range"
 +  | "anchored-text"
 +  | "note";
- 
+
  /** Stored drawing kinds (excludes placement-only aliases). */
  export type DrawingType = Exclude<
 @@ -140,12 +160,28 @@ export type DrawingType = Exclude<
  >;
- 
+
  export type DrawingLineStyle = "solid" | "dashed" | "dotted";
 +export type DrawingTextAlign = "left" | "center" | "right";
 +export type DrawingTextPlacement = "inside" | "outside" | "above" | "below";
@@ -8077,10 +8234,10 @@ index d7f5c15..1190b49 100644
 +
 +export type DrawingVisibilityUnit = "ticks" | "seconds" | "minutes" | "hours" | "days" | "weeks" | "months" | "ranges";
 +export type DrawingVisibilityRules = Record<DrawingVisibilityUnit, boolean>;
- 
+
  /** Magnet snapping mode: off, weak (snap within a few px), or strong (always). */
  export type MagnetMode = "none" | "weak" | "strong";
- 
+
  export interface DrawingLine {
    id: string;
 +  /** Optional user-facing object name. */
@@ -9851,7 +10008,7 @@ index e2ff72b..2740a55 100644
 +    | "closed"
    >
  >;
- 
+
 @@ -53,11 +82,40 @@ export function pickStyle(d: DrawingLine): StylePatch {
      color: d.color,
      width: d.width,
@@ -9892,7 +10049,7 @@ index e2ff72b..2740a55 100644
 +    closed: d.closed,
    };
  }
- 
+
 diff --git a/src/pages/trading/drawingToolCatalog.tsx b/src/pages/trading/drawingToolCatalog.tsx
 new file mode 100644
 index 0000000..1e41b9a
@@ -10047,7 +10204,7 @@ index 1be88ee..cc15fa0 100644
 @@ -114,6 +115,38 @@
    }
  }
- 
+
 +/* Compact control alignment. Outer dimensions remain owned by each surface. */
 +button,
 +input,
