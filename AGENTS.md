@@ -38,17 +38,18 @@ nepotřebuje účet ani API klíče a zatím nemá engine vyhodnocující obchod
 - Primární drawing rail je od 2026-10-24 jeden fixní 40px sloupec vlevo od
   celého workspace gridu. Nemění polohu s aktivní cell, layoutem ani maximize;
   vždy ovládá pouze aktivní chart. Není draggable ani skrývatelný. Případná
-  budoucí pohyblivá lišta smí být jen samostatná Favorites lišta.
+  pohyblivá lišta je samostatná Favorites lišta.
 - TradingView-like shell, fixní rail, rozšířený drawing pack, contextual
   settings a alignment pass jsou dokončené, commitnuté a pushnuté na
   `main` jako `956b02b` (`feat: add TradingView-style drawing workspace`).
   Poslední ověření je v `docs/2026-10-26-interface-alignment-verification.md`.
   Worktree byl při předání čistý. Nevracej tuto práci podle starších plánů,
   které ještě uvádějí „no commit“ nebo Favorites jako okamžitý další krok.
-- Po zprovoznění minimálního Electron shellu pokračuje UI etapa samostatnou
-  TradingView-like Favorites drawing lištou uvnitř desktopové aplikace:
-  pohyblivá horizontální lišta, výběr oblíbených nástrojů a persistence výběru
-  i pozice. Pevný levý drawing rail se kvůli Favorites nesmí změnit ani pohnout.
+- Samostatná pohyblivá Favorites lišta je v host UI implementovaná v
+  `web/compare/Favorites.tsx`; výběr, viditelnost a poloha se ukládají pod
+  `opencharts-preview:drawing-favorites`. Pevný levý drawing rail zůstává na
+  místě. Browser kontrola a zatím neúplné ověření v Electronu jsou popsány v
+  `docs/2026-11-02-workspace-visual-pass.md`.
 - **OpenCharts je hlavní rozhraní na `/`.** Uživatel výslovně zvolil cutover
   2026-10-22. Neimportuj Vela ani OpenAlgo nastavení/kresby; uživatel potvrdil,
   že nemá žádné, které chce zachovat. Historii trhu, její cestu, SQLite katalog,

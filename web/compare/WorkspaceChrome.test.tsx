@@ -4,6 +4,8 @@ import {describe,expect,it,vi} from 'vitest'
 import {
  ActiveChartMaximizeButton,
  ChartLayoutButton,
+ ChartSettingsToolbarButton,
+ workspaceTitlePrice,
  layoutMenuLeft,
  CellCaption,
  createWorkspaceBackup,
@@ -94,6 +96,21 @@ describe('workspace utility rail',()=>{
   expect(maximize).toContain('title="Maximize active chart"')
   expect(restore).toContain('aria-label="Restore chart layout"')
   expect(restore).toContain('title="Restore chart layout"')
+ })
+
+ it('exposes chart settings as a named toolbar action',()=>{
+  const markup=renderToStaticMarkup(createElement(ChartSettingsToolbarButton,{onOpen:noop}))
+  expect(markup).toContain('aria-label="Chart settings"')
+  expect(markup).toContain('title="Chart settings"')
+ })
+
+ it('only shows a title price for the current ready chart frame',()=>{
+  const status={key:'replay:BTCUSDT:5m:60000',ready:true,error:'',health:'live' as const,updated:null,close:77894.17}
+  expect(workspaceTitlePrice(status,'replay:BTCUSDT:5m:60000','replay')).toBe(77894.17)
+  expect(workspaceTitlePrice(status,'replay:ETHUSDT:5m:60000','replay')).toBeNull()
+  expect(workspaceTitlePrice(status,'replay:BTCUSDT:5m:120000','replay')).toBeNull()
+  expect(workspaceTitlePrice({...status,health:'stale'},status.key,'live')).toBeNull()
+  expect(workspaceTitlePrice({...status,ready:false},status.key,'replay')).toBeNull()
  })
 
  it('provides chart layout controls for desktop and compact workspaces',()=>{
@@ -244,13 +261,15 @@ describe('workspace shell compatibility',()=>{
  it('preserves the existing workspace backup payload keys and values',()=>{
   const workspace=initialWorkspace()
   const drawings:DrawingStore={}
-  const input={workspace,liveWorkspace:workspace.cells,drawings,magnet:'strong' as const,stay:true}
+  const favorites={tools:['trendline' as const],position:{x:100,y:80},open:true}
+  const input={workspace,liveWorkspace:workspace.cells,drawings,magnet:'strong' as const,stay:true,favorites}
   expect(createWorkspaceBackup(input)).toEqual({
    workspace:input.workspace,
    liveWorkspace:input.liveWorkspace,
    drawings:input.drawings,
    magnet:input.magnet,
    stay:input.stay,
+   favorites,
   })
  })
 

@@ -1,7 +1,6 @@
 import {useEffect,useRef,useState,type CSSProperties,type FormEvent,type KeyboardEvent as ReactKeyboardEvent,type ReactElement,type ReactNode,type Ref} from 'react'
 import {createPortal} from 'react-dom'
 import {
- BarChartIcon,
  CalendarIcon,
  ChevronLeftIcon,
  ChevronRightIcon,
@@ -17,7 +16,6 @@ import {
  MagnifyingGlassIcon,
  PauseIcon,
  PlayIcon,
- RowsIcon,
  TrackNextIcon,
 } from '@radix-ui/react-icons'
 import {TIMEFRAMES,type Symbol,type Timeframe} from '../replay'
@@ -25,6 +23,8 @@ import type {CellStatus,DrawingStore} from './ChartCell'
 import type {Magnet} from './studies'
 import {QUICK_RANGES,calendarMonth,quickRangeWindow,resolveDateRange,resolveGotoTime,type CellConfig,type QuickRange,type Workspace} from './workspace'
 import type {ChartBus} from './chartBus'
+import {CoinIcon} from './CoinIcon'
+import type {FavoritesPreferences} from './Favorites'
 
 export type WorkspaceBackup={
  workspace:Workspace
@@ -32,6 +32,7 @@ export type WorkspaceBackup={
  drawings:DrawingStore
  magnet:Magnet
  stay:boolean
+ favorites?:FavoritesPreferences
 }
 export type WorkspaceBackupPayload=WorkspaceBackup
 
@@ -54,6 +55,7 @@ export function createWorkspaceBackup(input:WorkspaceBackup):WorkspaceBackupPayl
   drawings:input.drawings,
   magnet:input.magnet,
   stay:input.stay,
+  ...(input.favorites?{favorites:input.favorites}:{}),
  }
 }
 
@@ -79,11 +81,19 @@ export function ActiveChartMaximizeButton({maximized,onToggle}:{maximized:boolea
 }
 
 export function IndicatorToolbarButton({expanded,onToggle,buttonRef}:{expanded:boolean;onToggle:()=>void;buttonRef?:Ref<HTMLButtonElement>}):ReactElement{
- return <button ref={buttonRef} className="toolbar-action alignment-control" aria-label="Indicators" title="Indicators" aria-expanded={expanded} onClick={onToggle}><BarChartIcon/>Indicators</button>
+ return <button ref={buttonRef} className="toolbar-action alignment-control" aria-label="Indicators" title="Indicators" aria-expanded={expanded} onClick={onToggle}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12V7l5-4 5 4 8-6M3 21h18M4 21v-5h3v5m2 0v-8h3v8m2 0v-6h3v6m2 0V10h2v11"/></svg>Indicators</button>
 }
 
 export function ChartLayoutButton({open,onToggle,buttonRef,className=''}:{open:boolean;onToggle:()=>void;buttonRef?:Ref<HTMLButtonElement>;className?:string}):ReactElement{
  return <button ref={buttonRef} className={`alignment-icon-control ${className}`} aria-label="Chart layout" title="Chart layout" aria-expanded={open} onClick={onToggle}><DashboardIcon/></button>
+}
+
+export function ChartSettingsToolbarButton({onOpen}:{onOpen:()=>void}):ReactElement{
+ return <button type="button" className="alignment-icon-control toolbar-chart-settings" aria-label="Chart settings" title="Chart settings" onClick={onOpen}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden="true"><path d="M7 2.8h10l5 9.2-5 9.2H7L2 12l5-9.2Z"/><circle cx="12" cy="12" r="3.5"/></svg></button>
+}
+
+export function workspaceTitlePrice(status:CellStatus|undefined,key:string,mode:'live'|'replay'):number|null{
+ return status?.key===key&&status.ready&&!status.error&&(mode==='replay'||status.health==='live')&&Number.isFinite(status.close)?status.close:null
 }
 
 export function layoutMenuLeft(triggerLeft:number,menuWidth:number,viewportWidth:number):number{
@@ -126,7 +136,7 @@ export function PairSelector({value,onChange}:{value:Symbol;onChange:(symbol:Sym
  }
  return <div className="pair-selector">
   <button ref={trigger} className="pair-selector-trigger alignment-control" type="button" aria-label="Pair" aria-haspopup="dialog" aria-expanded={open} onClick={()=>{setQuery('');setActiveIndex(0);setOpen(true)}}>
-   <span className={`coin-icon ${value}`} aria-hidden="true">{value==='BTCUSDT'?'₿':value==='ETHUSDT'?'Ξ':'◎'}</span>
+   <CoinIcon symbol={value}/>
    <span>{value}</span><ChevronDownIcon aria-hidden="true"/>
   </button>
   <dialog ref={dialog} className="pair-selector-dialog" aria-labelledby="pair-search-title" onCancel={event=>{event.preventDefault();dismiss()}} onClose={()=>trigger.current?.focus()} onClick={event=>{
@@ -153,7 +163,7 @@ export function PairSelector({value,onChange}:{value:Symbol;onChange:(symbol:Sym
       else if(event.key==='Home'){event.preventDefault();focusResult(0)}
       else if(event.key==='End'){event.preventDefault();focusResult(filteredPairs.length-1)}
      }}>
-      <span className={`coin-icon ${symbol}`} aria-hidden="true">{symbol==='BTCUSDT'?'₿':symbol==='ETHUSDT'?'Ξ':'◎'}</span>
+      <CoinIcon symbol={symbol}/>
       <span className="pair-result-copy"><strong>{symbol}</strong><span>{PAIR_NAMES[symbol]}</span></span>
       <span className="pair-market-type">PERPETUAL</span>{symbol===value?<CheckIcon aria-hidden="true"/>:null}
      </button>):<p className="pair-search-empty" role="status">No supported symbols found</p>}
@@ -289,7 +299,7 @@ export function WorkspaceUtilityRail({watchlistOpen,layoutOpen,layoutButtonRef,o
  function openChartSettings(){setSettingsOpen(false);settingsButton.current?.focus();onOpenSettings()}
  function openAbout(){setSettingsOpen(false);settingsButton.current?.focus();onOpenAbout()}
  return <nav ref={rail} className="workspace-utility-rail" aria-label="Workspace utilities">
-  <button className="alignment-icon-control" aria-label="Watchlist" title="Watchlist" aria-pressed={watchlistOpen} onClick={onToggleWatchlist}><RowsIcon/></button>
+  <button className="alignment-icon-control" aria-label="Watchlist" title="Watchlist" aria-pressed={watchlistOpen} onClick={onToggleWatchlist}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 3h14v18l-7-3-7 3V3Zm3 5h8m-8 4h8"/></svg></button>
   <ChartLayoutButton buttonRef={layoutButtonRef} className="layout-trigger-compact" open={layoutOpen} onToggle={onToggleLayout}/>
   <button ref={settingsButton} className="alignment-icon-control" aria-label="Settings" title="Settings" aria-haspopup="menu" aria-expanded={settingsOpen} onClick={()=>setSettingsOpen(value=>!value)}><GearIcon/></button>
   <button className="alignment-icon-control" aria-label="Export workspace backup" title="Export workspace backup" onClick={onExport}><DownloadIcon/></button>

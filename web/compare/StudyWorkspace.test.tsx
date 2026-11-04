@@ -15,7 +15,7 @@ vi.mock("@dylanpersonguy/opencharts", async (importOriginal) => ({
   useChartPreferences: useChartPreferencesMock,
 }));
 
-import { BarCloseCountdown, StudyWorkspace } from "./StudyWorkspace";
+import { BarCloseCountdown, StudyWorkspace, formatStudyValue } from "./StudyWorkspace";
 
 const enabledStatusLine = {
   showStatusLineStudyTitle: true,
@@ -68,6 +68,12 @@ describe("oscillator scale geometry", () => {
 });
 
 describe("shared study legend preferences", () => {
+  it("uses the price series formatter for price overlays and preserves missing values", () => {
+    const format=(value:number)=>value.toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3});
+    expect(formatStudyValue(78053.321,format)).toBe('78,053.321');
+    expect(formatStudyValue(undefined,format)).toBe('—');
+    expect(formatStudyValue(46.987)).toBe('46.99');
+  });
   it("renders shared study legend visibility preferences independently", () => {
     useChartPreferencesMock.mockReturnValue(enabledStatusLine);
     const props = {

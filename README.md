@@ -154,7 +154,11 @@ timeframe visibility are editable per study.
 VWAP is calculated over loaded bars and labels its UTC reset boundary. Drawings
 and viewport controls include weak/strong magnet, temporary Cmd/Ctrl snap,
 stay-in-drawing mode and scoped undo/redo. Native chart appearance preferences
-are shared across the workspace. Chart Settings now has Symbol, Status line,
+are shared across the workspace. The star at the bottom of the fixed drawing
+rail opens a separate Favorites toolbar. Choose its tools with the stars in
+the drawing menus or on the toolbar, and move it by dragging its handle or using the handle's arrow keys;
+the tool selection, visibility and position are saved locally. Favorite tools
+act on the active chart. Chart Settings now has Symbol, Status line,
 Scales and lines, and Canvas sections, with live chart preview, Cancel/Escape
 rollback, and a single persistent write on OK. Named appearance templates live
 in the existing scoped chart preference store and exclude Replay state, chart
@@ -165,7 +169,7 @@ labels** option, applied to both price scales and stored in named templates.
 
 Workspace configuration, Replay/Live selections, viewports and drawings persist
 locally under `opencharts-preview:`. **Export backup** downloads a JSON snapshot
-of workspace settings and drawings; it is not a backup of the market database
-or a verified restore workflow. Vela and OpenAlgo chart settings are not
+of workspace settings, Favorites and drawings; it does not include the market
+database or provide a verified restore workflow. Vela and OpenAlgo chart settings are not
 migrated. Historical browser verification is recorded in
 [`docs/2026-10-15-workspace-verification.md`](docs/2026-10-15-workspace-verification.md).
