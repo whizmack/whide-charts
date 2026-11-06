@@ -15,7 +15,7 @@ vi.mock("@dylanpersonguy/opencharts", async (importOriginal) => ({
   useChartPreferences: useChartPreferencesMock,
 }));
 
-import { BarCloseCountdown, StudyWorkspace, formatStudyValue } from "./StudyWorkspace";
+import { axisContextMenuKindForTarget, BarCloseCountdown, StudyWorkspace, formatStudyValue } from "./StudyWorkspace";
 
 const enabledStatusLine = {
   showStatusLineStudyTitle: true,
@@ -64,6 +64,44 @@ describe("oscillator scale geometry", () => {
     expect(safePriceScaleWidth(chart, "left")).toBe(84);
     width.mockImplementationOnce(() => { throw new Error("unexpected failure"); });
     expect(() => safePriceScaleWidth(chart, "left")).toThrow("unexpected failure");
+  });
+});
+
+describe("chart axis context menu target", () => {
+  it("recognizes the visible time axis in a separate oscillator chart", () => {
+    const hiddenPriceTimeRow = { cells: [{}, {}, {}] };
+    const pricePlotRow = { cells: [{}, {}, {}] };
+    const oscillatorPlotRow = { cells: [{}, {}, {}] };
+    const oscillatorTimeRow = { cells: [{}, {}, {}] };
+    const priceTable = {
+      rows: [pricePlotRow, hiddenPriceTimeRow],
+      contains: (row: object) => row === pricePlotRow || row === hiddenPriceTimeRow,
+    };
+    const oscillatorTable = {
+      rows: [oscillatorPlotRow, oscillatorTimeRow],
+      contains: (row: object) => row === oscillatorPlotRow || row === oscillatorTimeRow,
+    };
+    const timeCell = oscillatorTimeRow.cells[1];
+    const target = {
+      closest: (selector: string) => selector === "table"
+        ? oscillatorTable
+        : selector === "tr"
+          ? oscillatorTimeRow
+          : selector === "td"
+            ? timeCell
+            : null,
+    } as unknown as Element;
+    const chartRoot = { contains: (node: object) => node === oscillatorTable } as unknown as HTMLElement;
+    const chart = {
+      timeScale: () => ({ height: () => 29 }),
+      priceScale: () => ({ width: () => 82 }),
+    } as never;
+
+    expect(axisContextMenuKindForTarget(target, chartRoot, chart, {
+      showTimeScale: true,
+      showPriceScale: true,
+      priceScaleSide: "right",
+    })).toBe("time");
   });
 });
 
