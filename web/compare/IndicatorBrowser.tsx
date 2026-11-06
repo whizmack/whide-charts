@@ -53,7 +53,10 @@ export function IndicatorBrowser({
    setCategory('all')
    element.showModal()
    search.current?.focus()
-  }else if(!open&&element.open)element.close()
+  }else if(!open&&element.open){
+   element.close()
+   triggerRef.current?.focus()
+  }
  },[open])
  const close=()=>onClose()
  return <dialog ref={dialog} className="indicator-browser-dialog" aria-labelledby="indicator-browser-title" onCancel={event=>{event.preventDefault();close()}} onClose={()=>triggerRef.current?.focus()} onClick={event=>{
