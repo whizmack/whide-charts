@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState,type ComponentProps} from 'react'
-import {ChartPanel,CHART_COLORS,buildChartSettingsOptions,observeChartSize,useChartPreferences,type IndicatorType} from '@dylanpersonguy/opencharts'
-import {createChart,CrosshairMode,LineStyle,type IChartApi,type ISeriesApi,type UTCTimestamp,type MouseEventParams,type Time} from 'lightweight-charts'
-import {GearIcon,Cross2Icon,ArrowUpIcon,ArrowDownIcon} from '@radix-ui/react-icons'
+import {ChartPanel,CHART_COLORS,buildChartSettingsOptions,observeChartSize,updateChartPreferences,useChartPreferences,type IndicatorType} from '@dylanpersonguy/opencharts'
+import {createChart,CrosshairMode,LineStyle,type AutoscaleInfo,type IChartApi,type ISeriesApi,type UTCTimestamp,type MouseEventParams,type Time} from 'lightweight-charts'
+import {GearIcon,Cross2Icon,ArrowUpIcon,ArrowDownIcon,EyeOpenIcon,EyeClosedIcon,TrashIcon} from '@radix-ui/react-icons'
 import type {Bar} from '../api'
 import {MINUTES,type Timeframe} from '../replay'
 import {ChartBus,safePriceScaleWidth,type ChartPort} from './chartBus'
@@ -12,14 +12,20 @@ const emptyIndicators:IndicatorType[]=[]
 const TRADINGVIEW_FONT_FAMILY='-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif'
 const style=(s:StudySettings)=>s.style==='solid'?LineStyle.Solid:s.style==='dotted'?LineStyle.Dotted:LineStyle.Dashed
 const data=(points:{time:number;value:number;color?:string}[])=>points.map(p=>({...p,time:p.time as UTCTimestamp}))
-function oscillatorChartOptions(prefs:ReturnType<typeof useChartPreferences>,timeframe:Timeframe,bottom:boolean){
+function oscillatorAutoscaleInfo(type:'RSI'|'STOCH',base:()=>AutoscaleInfo|null):AutoscaleInfo|null{
+ const info=base(),min=type==='RSI'?20:0,max=type==='RSI'?80:100
+ if(!info)return {priceRange:{minValue:min,maxValue:max}}
+ return {...info,priceRange:{minValue:Math.min(min,info.priceRange.minValue),maxValue:Math.max(max,info.priceRange.maxValue)}}
+}
+function oscillatorChartOptions(prefs:ReturnType<typeof useChartPreferences>,timeframe:Timeframe,bottom:boolean,type:IndicatorType){
  const options=buildChartSettingsOptions(prefs,CHART_COLORS.dark,timeframe)
+ const scaleMargins={top:0,bottom:0}
  return {...options,
   layout:{...options.layout,fontFamily:TRADINGVIEW_FONT_FAMILY},
   grid:{vertLines:{style:LineStyle.Dotted,...options.grid?.vertLines},horzLines:{style:LineStyle.Dotted,...options.grid?.horzLines}},
   crosshair:{mode:CrosshairMode.Normal,...options.crosshair},
-  leftPriceScale:{minimumWidth:80,borderColor:'#292929',scaleMargins:{top:prefs.priceScaleTopMargin,bottom:prefs.priceScaleBottomMargin},...options.leftPriceScale},
-  rightPriceScale:{minimumWidth:80,borderColor:'#292929',scaleMargins:{top:prefs.priceScaleTopMargin,bottom:prefs.priceScaleBottomMargin},...options.rightPriceScale},
+  leftPriceScale:{minimumWidth:80,borderColor:'#292929',...options.leftPriceScale,scaleMargins},
+  rightPriceScale:{minimumWidth:80,borderColor:'#292929',...options.rightPriceScale,scaleMargins},
   timeScale:{timeVisible:true,borderColor:'#292929',minBarSpacing:.5,...options.timeScale,visible:prefs.showTimeScale&&bottom},
  }
 }
@@ -77,7 +83,7 @@ export function StudyWorkspace({cell,bars,bus,settings,active,onSettings,onEdit,
  useEffect(()=>{
   if(!main)return
   const series:ISeriesApi<'Line'>[]=[]
-  for(const type of overlays)for(const l of studyData(barRef.current,type,resolved[type]).lines){const line=main.chart.addLineSeries({priceScaleId:prefs.priceScaleSide,priceFormat:main.series.options().priceFormat,color:l.color,lineWidth:resolved[type].width,lineStyle:style(resolved[type]),lineVisible:resolved[type].lineVisible,priceLineVisible:false,lastValueVisible:resolved[type].showPriceLabel,crosshairMarkerVisible:false});series.push(line)}
+  for(const type of overlays)for(const l of studyData(barRef.current,type,resolved[type]).lines){const line=main.chart.addLineSeries({priceScaleId:prefs.priceScaleSide,priceFormat:main.series.options().priceFormat,color:l.color,lineWidth:resolved[type].width,lineStyle:style(resolved[type]),visible:resolved[type].visible,lineVisible:resolved[type].lineVisible,priceLineVisible:false,lastValueVisible:resolved[type].showPriceLabel,crosshairMarkerVisible:false});series.push(line)}
   overlaySeries.current=series
   return()=>{overlaySeries.current=[];for(const line of series){try{main.chart.removeSeries(line)}catch{/* Main chart may already be disposed on a theme change. */}}}
  },[main,overlays,resolved,prefs.pricePrecision])
@@ -88,7 +94,9 @@ export function StudyWorkspace({cell,bars,bus,settings,active,onSettings,onEdit,
   {above.map(pane)}
   <div className={`price-pane axis-${prefs.showPriceScale?prefs.priceScaleSide:'none'}`} key="price"><ChartPanel {...panel} drawingRailHost={drawingRailHost} activeIndicators={emptyIndicators} onChartReady={ready}/>
    <BarCloseCountdown isReplaying={Boolean(panel.isReplaying)} timeframe={panel.timeframe as Timeframe} chart={main?.chart??null} series={main?.series??null} otherSeries={overlaySeries} last={bars.at(-1)} previous={bars.at(-2)}/>
-   <div className="overlay-legends">{overlays.map(t=><StudyLegend key={t} type={t} settings={resolved[t]} values={computed[t].lines.map(l=>hoverTime===null?l.data.at(-1)?.value:l.data.find(p=>p.time===hoverTime)?.value)} formatValue={main?value=>main.series.priceFormatter().format(value):undefined} showTitle={prefs.showStatusLineStudyTitle} showInputs={prefs.showStatusLineStudyInputs&&resolved[t].showStatusLineInputs} showValues={prefs.showStatusLineStudyValues&&resolved[t].showStatusLineValues} showBackground={prefs.showStatusLineStudyBackground} onEdit={()=>onEdit(t)} onRemove={()=>onRemove(t)}/>)}</div>
+   <div className="overlay-legends">
+    <VolumeLegend bar={hoverTime===null?bars.at(-1):bars.find(value=>value.time/1000===hoverTime)} visible={prefs.showVolume} showTitle={prefs.showStatusLineStudyTitle} showValues={prefs.showStatusLineStudyValues} showBackground={prefs.showStatusLineStudyBackground} onToggle={()=>updateChartPreferences({showVolume:!prefs.showVolume})} onEdit={onOpenSettings}/>
+    {overlays.map(t=><StudyLegend key={t} type={t} settings={resolved[t]} values={computed[t].lines.map(l=>hoverTime===null?l.data.at(-1)?.value:l.data.find(p=>p.time===hoverTime)?.value)} formatValue={main?value=>main.series.priceFormatter().format(value):undefined} showTitle={prefs.showStatusLineStudyTitle} showInputs={prefs.showStatusLineStudyInputs&&resolved[t].showStatusLineInputs} showValues={prefs.showStatusLineStudyValues&&resolved[t].showStatusLineValues} showBackground={prefs.showStatusLineStudyBackground} onEdit={()=>onEdit(t)} onRemove={()=>onRemove(t)} onToggleVisible={()=>onSettings(t,{...resolved[t],visible:!resolved[t].visible})}/>)}</div>
   </div>
   {below.map(pane)}
   {axisMenu?<AxisContextMenu key={axisMenu.id} menu={axisMenu} chart={axisMenu.chart} prefs={prefs} onOpenSettings={onOpenSettings} onClose={closeAxisMenu}/>:null}
@@ -188,9 +196,32 @@ export function BarCloseCountdown({timeframe,chart,series,otherSeries,last,previ
  </>
 }
 export function formatStudyValue(value:number|undefined,formatter?:(value:number)=>string):string{return value===undefined?'—':formatter?formatter(value):value.toFixed(2)}
-function StudyLegend({type,settings:s,values,formatValue,showTitle,showInputs,showValues,showBackground,onEdit,onRemove,onMove}:{type:IndicatorType;settings:StudySettings;values:(number|undefined)[];formatValue?:(value:number)=>string;showTitle:boolean;showInputs:boolean;showValues:boolean;showBackground:boolean;onEdit:()=>void;onRemove:()=>void;onMove?:()=>void}){
+export function formatVolumeValue(value:number|undefined):string{
+ if(value===undefined)return '—'
+ const abs=Math.abs(value);let unit=abs>=1_000_000_000?'B':abs>=1_000_000?'M':abs>=1_000?'K':''
+ let divisor=unit==='B'?1_000_000_000:unit==='M'?1_000_000:unit==='K'?1_000:1
+ if((unit==='K'||unit==='M')&&abs/divisor>=999.95){unit=unit==='K'?'M':'B';divisor=unit==='M'?1_000_000:1_000_000_000}
+ return unit?`${(value/divisor).toFixed(1).replace(/\.0$/,'')}${unit}`:Math.round(value).toLocaleString('en-US')
+}
+function StudyLegend({type,settings:s,values,formatValue,showTitle,showInputs,showValues,showBackground,onEdit,onRemove,onToggleVisible,onMove}:{type:IndicatorType;settings:StudySettings;values:(number|undefined)[];formatValue?:(value:number)=>string;showTitle:boolean;showInputs:boolean;showValues:boolean;showBackground:boolean;onEdit:()=>void;onRemove:()=>void;onToggleVisible:()=>void;onMove?:()=>void}){
  const params=type==='MACD'?`${s.fast} ${s.slow} ${s.signal}`:type==='VWAP'?'UTC · loaded bars':`${s.period}${type==='RSI'?` · SMA ${s.smoothing}`:''}`
- return <div className={`study-legend${showBackground?'':' study-legend--transparent'}`} onDoubleClick={onEdit}>{showTitle?<span className="study-legend-title">{type}</span>:null}{showInputs?<span className="study-legend-inputs">{params}</span>:null}{showValues?<span className="study-legend-values">{values.map((v,i)=><span key={i} style={{color:i===2?(v!==undefined&&v>=0?'#26a69a':'#ef5350'):i?s.secondaryColor:s.color}}>{formatStudyValue(v,formatValue)}</span>)}</span>:null}<button aria-label={`${type} settings`} title="Settings" onClick={onEdit}><GearIcon/></button>{onMove?<button aria-label={`Move ${type} ${s.placement==='above'?'below':'above'} price`} title={s.placement==='above'?`Move below price`:`Move above price`} onClick={onMove}>{s.placement==='above'?<ArrowDownIcon/>:<ArrowUpIcon/>}</button>:null}<button aria-label={`Remove ${type}`} title="Remove" onClick={onRemove}><Cross2Icon/></button></div>
+ return <div className={`study-legend${s.visible?'':' study-legend--hidden'}${showBackground?'':' study-legend--transparent'}`} onDoubleClick={event=>{if(!(event.target as Element).closest('button'))onEdit()}}>
+  {showTitle?<span className="study-legend-title">{type}</span>:null}{showInputs?<span className="study-legend-inputs">{params}</span>:null}{showValues&&s.visible?<span className="study-legend-values">{values.map((v,i)=><span key={i} style={{color:i===2?(v!==undefined&&v>=0?'#26a69a':'#ef5350'):i?s.secondaryColor:s.color}}>{formatStudyValue(v,formatValue)}</span>)}</span>:null}
+  <div className="study-legend-actions">
+   <button type="button" className="study-legend-visibility" aria-label={`${s.visible?'Hide':'Show'} ${type}`} aria-pressed={s.visible} title={`${s.visible?'Hide':'Show'} ${type}`} onClick={onToggleVisible}>{s.visible?<EyeOpenIcon/>:<EyeClosedIcon/>}</button>
+   <button type="button" aria-label={`${type} settings`} title="Settings" onClick={onEdit}><GearIcon/></button>{onMove?<button type="button" aria-label={`Move ${type} ${s.placement==='above'?'below':'above'} price`} title={s.placement==='above'?`Move below price`:`Move above price`} onClick={onMove}>{s.placement==='above'?<ArrowDownIcon/>:<ArrowUpIcon/>}</button>:null}<button type="button" aria-label={`Remove ${type}`} title="Remove" onClick={onRemove}><TrashIcon/></button>
+  </div>
+ </div>
+}
+function VolumeLegend({bar,visible,showTitle,showValues,showBackground,onToggle,onEdit}:{bar:Bar|undefined;visible:boolean;showTitle:boolean;showValues:boolean;showBackground:boolean;onToggle:()=>void;onEdit:()=>void}){
+ const color=bar?(bar.close>=bar.open?'#26a69a':'#ef5350'):'#92959d'
+ return <div className={`study-legend study-legend--volume${visible?'':' study-legend--hidden'}${showBackground?'':' study-legend--transparent'}`}>
+  {showTitle?<span className="study-legend-title">Vol</span>:null}{showValues&&visible?<span className="study-legend-values"><span style={{color}}>{formatVolumeValue(bar?.volume)}</span></span>:null}
+  <div className="study-legend-actions">
+   <button type="button" className="study-legend-visibility" aria-label={`${visible?'Hide':'Show'} Volume`} aria-pressed={visible} title={`${visible?'Hide':'Show'} Volume`} onClick={onToggle}>{visible?<EyeOpenIcon/>:<EyeClosedIcon/>}</button>
+   <button type="button" aria-label="Volume settings" title="Settings" onClick={onEdit}><GearIcon/></button>
+  </div>
+ </div>
 }
 function OscillatorPane({renderedHeight,cell,type,bars,settings:s,bus,timeframe,bottom,onSettings,onEdit,onRemove,onAxisContextMenu}:{renderedHeight:number;cell:string;type:IndicatorType;bars:Bar[];settings:StudySettings;bus:ChartBus;timeframe:Timeframe;bottom:boolean;onSettings:(v:StudySettings)=>void;onEdit:()=>void;onRemove:()=>void;onAxisContextMenu:AxisContextMenuHandler}){
  const host=useRef<HTMLDivElement>(null),chartRef=useRef<IChartApi|null>(null),series=useRef<ISeriesApi<'Line'>[]>([]),hist=useRef<ISeriesApi<'Histogram'>|null>(null),anchor=useRef<ISeriesApi<'Line'>|null>(null),port=useRef<ChartPort|null>(null)
@@ -202,13 +233,13 @@ function OscillatorPane({renderedHeight,cell,type,bars,settings:s,bus,timeframe,
  const updateBandRef=useRef(updateBand);updateBandRef.current=updateBand
  useEffect(()=>{
   if(!host.current)return
- const chart=createChart(host.current,{...oscillatorChartOptions(prefs,timeframe,bottom),autoSize:false,width:host.current.clientWidth,height:host.current.clientHeight})
+ const chart=createChart(host.current,{...oscillatorChartOptions(prefs,timeframe,bottom,type),autoSize:false,width:host.current.clientWidth,height:host.current.clientHeight})
   chartRef.current=chart
   const chartElement=chart.chartElement(),handleContextMenu=(event:MouseEvent)=>onAxisContextMenuRef.current(chart,event)
   chartElement.addEventListener('contextmenu',handleContextMenu,true)
   anchor.current=chart.addLineSeries({priceScaleId:'anchor',lineVisible:false,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false});chart.priceScale('anchor').applyOptions({visible:false})
-  if(type==='MACD')hist.current=chart.addHistogramSeries({priceLineVisible:false,lastValueVisible:s.showPriceLabel,visible:s.lineVisible})
-  series.current=computed.lines.map(l=>chart.addLineSeries({color:l.color,lineWidth:s.width,lineStyle:style(s),lineVisible:s.lineVisible,priceLineVisible:false,lastValueVisible:s.showPriceLabel,crosshairMarkerVisible:true,...(['RSI','STOCH'].includes(type)?{autoscaleInfoProvider:()=>({priceRange:{minValue:0,maxValue:100}})}:{})}))
+  if(type==='MACD')hist.current=chart.addHistogramSeries({priceLineVisible:false,lastValueVisible:s.showPriceLabel,visible:s.visible&&s.lineVisible})
+ series.current=computed.lines.map(l=>chart.addLineSeries({color:l.color,lineWidth:s.width,lineStyle:style(s),visible:s.visible,lineVisible:s.lineVisible,priceLineVisible:false,lastValueVisible:s.showPriceLabel,crosshairMarkerVisible:true,...(type==='RSI'||type==='STOCH'?{autoscaleInfoProvider:(base:()=>AutoscaleInfo|null)=>oscillatorAutoscaleInfo(type,base)}:{})}))
   if(['RSI','STOCH'].includes(type))for(const price of type==='RSI'?[30,50,70]:[20,50,80])series.current[0].createPriceLine({price,color:price===50?'#44434c':'#777180',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false,title:''})
   if(type==='MACD')series.current[0].createPriceLine({price:0,color:'#656970',lineWidth:1,lineStyle:LineStyle.Dashed,axisLabelVisible:false,title:''})
   const p:ChartPort={onHover:setHoverTime,id:cell+':'+type,cell,chart,series:series.current[0],times:bars.map(b=>b.time/1000),values:new Map(computed.lines[0].data.map(p=>[p.time,p.value])),width:MINUTES[timeframe]*60};port.current=p
@@ -229,13 +260,13 @@ function OscillatorPane({renderedHeight,cell,type,bars,settings:s,bus,timeframe,
   return()=>{stopObservingSize();if(bandFrame!==null)cancelAnimationFrame(bandFrame);chartElement.removeEventListener('contextmenu',handleContextMenu,true);bus.remove(p.id);chart.timeScale().unsubscribeVisibleLogicalRangeChange(refreshBand);chart.unsubscribeCrosshairMove(hover);chart.remove();chartRef.current=null;series.current=[];hist.current=null;anchor.current=null;port.current=null}
  // Appearance updates are applied below; rebuilding here would discard the pane viewport.
  },[cell,type,bus,timeframe])
- useEffect(()=>{const chart=chartRef.current;if(!chart)return;chart.applyOptions(oscillatorChartOptions(prefs,timeframe,bottom));for(const line of series.current)line.applyOptions({priceScaleId:prefs.priceScaleSide});updateBand();const frame=requestAnimationFrame(updateBand);return()=>cancelAnimationFrame(frame)},[prefs,timeframe,bottom,updateBand])
- useEffect(()=>{if(!chartRef.current)return;anchor.current?.setData(bars.map(b=>({time:b.time/1000 as UTCTimestamp})));computed.lines.forEach((l,i)=>{series.current[i]?.applyOptions({color:l.color,lineWidth:s.width,lineStyle:style(s),lineVisible:s.lineVisible,lastValueVisible:s.showPriceLabel});series.current[i]?.setData(data(l.data))});hist.current?.applyOptions({visible:s.lineVisible,lastValueVisible:s.showPriceLabel});hist.current?.setData(data(computed.histogram));bus.update(cell+':'+type,bars.map(b=>b.time/1000),new Map(computed.lines[0].data.map(p=>[p.time,p.value])));updateBand()},[computed,bars,s,bus,cell,type,updateBand])
+ useEffect(()=>{const chart=chartRef.current;if(!chart)return;chart.applyOptions(oscillatorChartOptions(prefs,timeframe,bottom,type));for(const line of series.current)line.applyOptions({priceScaleId:prefs.priceScaleSide});updateBand();const frame=requestAnimationFrame(updateBand);return()=>cancelAnimationFrame(frame)},[prefs,timeframe,bottom,type,updateBand])
+ useEffect(()=>{if(!chartRef.current)return;anchor.current?.setData(bars.map(b=>({time:b.time/1000 as UTCTimestamp})));computed.lines.forEach((l,i)=>{series.current[i]?.applyOptions({color:l.color,lineWidth:s.width,lineStyle:style(s),visible:s.visible,lineVisible:s.lineVisible,lastValueVisible:s.showPriceLabel});series.current[i]?.setData(data(l.data))});hist.current?.applyOptions({visible:s.visible&&s.lineVisible,lastValueVisible:s.showPriceLabel});hist.current?.setData(data(computed.histogram));bus.update(cell+':'+type,bars.map(b=>b.time/1000),new Map(computed.lines[0].data.map(p=>[p.time,p.value])));updateBand()},[computed,bars,s,bus,cell,type,updateBand])
  const drag=useRef<{y:number;height:number}|null>(null)
  return <section className={`oscillator-pane axis-${prefs.showPriceScale?prefs.priceScaleSide:'none'}`} aria-label={`${type} pane`} style={{height:renderedHeight}}>
   <div className="pane-divider" role="separator" aria-label={`Resize ${type} pane`} aria-orientation="horizontal" aria-valuemin={100} aria-valuemax={400} aria-valuenow={s.height} tabIndex={0} onPointerDown={e=>{drag.current={y:e.clientY,height:s.height};e.currentTarget.setPointerCapture(e.pointerId)}} onPointerMove={e=>{if(drag.current)onSettings(normalizeStudy(type,{...s,height:drag.current.height+drag.current.y-e.clientY}))}} onPointerUp={()=>{drag.current=null}} onLostPointerCapture={()=>{drag.current=null}} onKeyDown={e=>{if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();onSettings(normalizeStudy(type,{...s,height:s.height+(e.key==='ArrowUp'?10:-10)}))}}}/>
   <div ref={host} className="oscillator-canvas"/>
-  {band?<div className="oscillator-band" style={band}/>:null}
-  <div className="pane-legend"><StudyLegend type={type} settings={s} values={[...computed.lines.map(l=>hoverTime===null?l.data.at(-1)?.value:l.data.find(p=>p.time===hoverTime)?.value),...(type==='MACD'?[hoverTime===null?computed.histogram.at(-1)?.value:computed.histogram.find(p=>p.time===hoverTime)?.value]:[])]} showTitle={prefs.showStatusLineStudyTitle} showInputs={prefs.showStatusLineStudyInputs&&s.showStatusLineInputs} showValues={prefs.showStatusLineStudyValues&&s.showStatusLineValues} showBackground={prefs.showStatusLineStudyBackground} onEdit={onEdit} onRemove={onRemove} onMove={()=>onSettings({...s,placement:s.placement==='above'?'below':'above'})}/></div>
+  {band&&s.visible?<div className="oscillator-band" style={band}/>:null}
+  <div className="pane-legend"><StudyLegend type={type} settings={s} values={[...computed.lines.map(l=>hoverTime===null?l.data.at(-1)?.value:l.data.find(p=>p.time===hoverTime)?.value),...(type==='MACD'?[hoverTime===null?computed.histogram.at(-1)?.value:computed.histogram.find(p=>p.time===hoverTime)?.value]:[])]} showTitle={prefs.showStatusLineStudyTitle} showInputs={prefs.showStatusLineStudyInputs&&s.showStatusLineInputs} showValues={prefs.showStatusLineStudyValues&&s.showStatusLineValues} showBackground={prefs.showStatusLineStudyBackground} onEdit={onEdit} onRemove={onRemove} onToggleVisible={()=>onSettings({...s,visible:!s.visible})} onMove={()=>onSettings({...s,placement:s.placement==='above'?'below':'above'})}/></div>
  </section>
 }

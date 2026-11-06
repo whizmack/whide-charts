@@ -32,6 +32,11 @@ it('bounds settings and retains a valid above-price pane configuration',()=>{
   expect(settings.period).toBe(1);expect(settings.height).toBe(400);expect(settings.placement).toBe('above')
   expect(settings.color).toBe('#abcdef')
 })
+it('persists explicit study visibility while defaulting older saved studies to visible',()=>{
+  expect(defaultStudy('RSI').visible).toBe(true)
+  expect(normalizeStudy('RSI',{visible:false}).visible).toBe(false)
+  expect(normalizeStudy('RSI',{}).visible).toBe(true)
+})
 it('drops deferred precision from persisted study settings',()=>{
   const previous={...defaultStudy('EMA'),precision:4}
   expect(normalizeStudy('EMA',previous)).not.toHaveProperty('precision')

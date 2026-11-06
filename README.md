@@ -150,7 +150,11 @@ crosshair sync map by timestamps.
 RSI, MACD, ATR and Stochastic use separate resizable panes; EMA, SMA, Bollinger
 Bands and VWAP render over price. Study settings use Inputs, Style and Visibility
 tabs; line appearance, price-scale labels, status-line values and supported
-timeframe visibility are editable per study.
+timeframe visibility are editable per study. Indicator controls appear when
+hovering a legend; the eye hides a study while keeping its legend entry and
+saved settings, and hidden studies can be restored from that entry. Volume has
+its own legend row; its visibility uses the shared chart appearance preference
+and therefore applies across workspace charts.
 VWAP is calculated over loaded bars and labels its UTC reset boundary. Drawings
 and viewport controls include weak/strong magnet, temporary Cmd/Ctrl snap,
 stay-in-drawing mode and scoped undo/redo. Native chart appearance preferences

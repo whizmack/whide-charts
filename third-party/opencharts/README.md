@@ -102,6 +102,13 @@ The 2026-10-27 axis-menu follow-up exports the existing
 shared, persistent scale preferences as the native settings dialog. No new
 preference store or preference keys are introduced.
 
+The 2026-11-06 drawing-settings follow-up adds four draggable midpoint handles
+to selected rectangles. Each handle changes only its corresponding edge, and
+the coordinate mapping works regardless of anchor direction. Drawing and chart
+settings number inputs display at most two decimals while preserving the full
+stored value until the user edits it. Regression tests cover rectangle handle
+rendering/hit-testing and numeric input formatting/precision.
+
 The 2026-10-28 time-scale follow-up adds the reference's `Day of week on
 labels` checkbox. It defaults on, persists with the shared appearance
 preferences and named templates, and formats only day-of-month axis ticks in

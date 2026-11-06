@@ -15,13 +15,14 @@ vi.mock("@dylanpersonguy/opencharts", async (importOriginal) => ({
   useChartPreferences: useChartPreferencesMock,
 }));
 
-import { axisContextMenuKindForTarget, BarCloseCountdown, StudyWorkspace, formatStudyValue } from "./StudyWorkspace";
+import { axisContextMenuKindForTarget, BarCloseCountdown, StudyWorkspace, formatStudyValue, formatVolumeValue } from "./StudyWorkspace";
 
 const enabledStatusLine = {
   showStatusLineStudyTitle: true,
   showStatusLineStudyInputs: true,
   showStatusLineStudyValues: true,
   showStatusLineStudyBackground: true,
+  showVolume: true,
 };
 
 const bars = Array.from({ length: 25 }, (_, index) => {
@@ -111,6 +112,10 @@ describe("shared study legend preferences", () => {
     expect(formatStudyValue(78053.321,format)).toBe('78,053.321');
     expect(formatStudyValue(undefined,format)).toBe('—');
     expect(formatStudyValue(46.987)).toBe('46.99');
+    expect(formatVolumeValue(5200)).toBe('5.2K');
+    expect(formatVolumeValue(5000)).toBe('5K');
+    expect(formatVolumeValue(999999)).toBe('1M');
+    expect(formatVolumeValue(undefined)).toBe('—');
   });
   it("renders shared study legend visibility preferences independently", () => {
     useChartPreferencesMock.mockReturnValue(enabledStatusLine);
@@ -131,6 +136,8 @@ describe("shared study legend preferences", () => {
     const enabledMarkup = markup();
 
     expect(enabledMarkup).toContain("study-legend");
+    expect(enabledMarkup).toContain('study-legend--volume');
+    expect(enabledMarkup).toContain('aria-label="Hide Volume"');
     expect(enabledMarkup).toContain("study-legend-title");
     expect(enabledMarkup).toContain("study-legend-inputs");
     expect(enabledMarkup).toContain("study-legend-values");
@@ -160,6 +167,27 @@ describe("shared study legend preferences", () => {
         expect(updatedMarkup).not.toContain("study-legend--transparent");
       }
     }
+  });
+
+  it("leaves a hidden study in the legend with a persistent Show control", () => {
+    useChartPreferencesMock.mockReturnValue({ ...enabledStatusLine, showVolume: false });
+    const props = {
+      cell: "cell-1",
+      bars,
+      bus: new ChartBus(),
+      settings: { RSI: { ...defaultStudy("RSI"), visible: false } },
+      active: ["RSI"] as ["RSI"],
+      onSettings: vi.fn(),
+      onEdit: vi.fn(),
+      onRemove: vi.fn(),
+      onOpenSettings: vi.fn(),
+      drawingRailHost: null,
+      panel: { timeframe: "5m" } as never,
+    };
+    const markup = renderToStaticMarkup(<StudyWorkspace {...props} />);
+    expect(markup).toContain('study-legend--hidden');
+    expect(markup).toContain('aria-label="Show RSI"');
+    expect(markup).not.toContain('study-legend-values');
   });
 
 });

@@ -53,3 +53,8 @@ it('rejects malformed persisted layout and selections without losing the app',()
   expect(w.layout).toBe('one');expect(w.cells).toHaveLength(4)
   expect(w.cells[0].symbol).toBe('BTCUSDT');expect(Number.isFinite(w.asOf)).toBe(true)
 })
+it('restores a hidden study without removing it from the active indicator list',()=>{
+  const w=loadWorkspace({cells:[{id:'chart-1',indicators:['RSI'],studies:{RSI:{visible:false}}}]})
+  expect(w.cells[0].indicators).toContain('RSI')
+  expect(w.cells[0].studies.RSI?.visible).toBe(false)
+})
