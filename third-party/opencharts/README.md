@@ -7,8 +7,9 @@ MIT; underlying Lightweight Charts Apache-2.0 with its own attribution.
 The local patch exports the controlled chart panel, settings and related types, hides the live countdown during replay, offsets the legend clear of the tool rail, and adds optional controls to hide the unused calendar and display the actual last traded close without invented bid/ask quotes.
 The prototype does not mount the upstream terminal, demo feed or trading gateway.
 
-Rebuild: clone the pinned revision; apply controlled-chart.patch; run
-`npm ci --ignore-scripts`, `npm run build:lib`, then `npm pack --ignore-scripts`.
+Rebuild: clone the pinned revision; apply `controlled-chart.patch` with
+`git apply --unidiff-zero`; run `npm ci --ignore-scripts`,
+`npm run build:lib`, then `npm pack --ignore-scripts`.
 Copy the resulting tarball into this folder. Install with npm ci from the host lockfile.
 
 The workspace patch also exports native indicator calculations and chart-ready
@@ -68,12 +69,12 @@ and editing remain inside OpenCharts. Regression coverage lives in the three
 The 2026-10-25 settings pass replaces the generic drawing editor with native,
 family-aware Style, Text, Coordinates, Visibility and Position Inputs tabs.
 Dialog edits preview transactionally and commit once; Cancel, Escape and close
-restore the original drawing. A clamped contextual toolbar follows the selected
-drawing while the fixed workspace rail remains stationary. The patch includes
-model, renderer, dialog, tab and floating-toolbar regression coverage. Position
-line/label/stat preferences, stable z-ordering, family-specific Fibonacci
-defaults, attached text and compact range labels are applied by the renderer,
-not only persisted by the settings UI.
+restore the original drawing. A clamped contextual toolbar opens near the
+selected drawing while the fixed workspace rail remains stationary. The patch
+includes model, renderer, dialog, tab and floating-toolbar regression coverage.
+Position line/label/stat preferences, stable z-ordering, family-specific
+Fibonacci defaults, attached text and compact range labels are applied by the
+renderer, not only persisted by the settings UI.
 
 The 2026-10-26 alignment follow-up keeps a completed drawing selected even when
 stay-in-drawing-mode leaves the tool armed, so the contextual style/settings
@@ -108,6 +109,26 @@ the coordinate mapping works regardless of anchor direction. Drawing and chart
 settings number inputs display at most two decimals while preserving the full
 stored value until the user edits it. Regression tests cover rectangle handle
 rendering/hit-testing and numeric input formatting/precision.
+
+The rectangle interaction follow-up keeps selected drawings marked as selected
+in hit-testing, so the visible side handles are recognized and resize instead
+of starting a new drawing or moving the body. This also works while Keep
+drawing remains armed; clicks elsewhere still place another drawing. The host
+persists the final drawing only on pointer release.
+`drawing-tools-pack-placement.test.ts` exercises all four side handles through
+the actual selected-state resolution.
+
+The 2026-11-06 toolbar follow-up stores one chart-local position per chart cell.
+It opens near the first selected drawing, then stays put when drawing geometry
+or selection changes; only the toolbar grip moves it. Its local point is
+reprojected through the cell's current viewport bounds and clamped when the
+cell or contextual toolbar width changes. Grip dragging starts from the
+visible clamped point after a resize. Pane reorder/layout mutations refresh the
+viewport origin even when chart dimensions stay fixed. The focused grip also
+moves with arrow keys, with Shift for a larger nudge. Toolbar positions are not
+persisted. Regression coverage checks selection changes, pointer/keyboard
+movement, moved cell bounds, position-only pane movement and narrow-cell
+clamping.
 
 The 2026-10-28 time-scale follow-up adds the reference's `Day of week on
 labels` checkbox. It defaults on, persists with the shared appearance

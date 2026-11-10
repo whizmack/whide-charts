@@ -65,6 +65,9 @@ Support/PerpReplay. Stávající data se při změně cesty automaticky nestěhu
   Oscilátory mají oddělené panely; vstupy, zdroje a styl lze upravit.
 - Kresby zahrnují čáry, Fibonacci, tvary, text a position nástroje. Position
   tool popisuje plánovaný setup; neznamená vyplněný obchod ani výpočet P&L.
+  Kontextový panel se při prvním výběru otevře poblíž kresby, pak drží vlastní
+  pozici v daném grafu; přesouvá se úchopem panelu (po fokusu také šipkami),
+  ne pohybem kresby.
 - Rozložení, výběr párů/timeframů, indikátory, Replay čas, viewporty a kresby se
   ukládají do localStorage prohlížeče pod prefixem `opencharts-preview:`.
   Vzhled grafu má samostatné nativní preference OpenCharts. Jiný origin nebo
